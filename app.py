@@ -18,7 +18,7 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 
-# ------------- CONFIG -------------
+# ---------- CONFIG ----------
 st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
 DEMO_MODE = st.secrets.get("DEMO_MODE", False)
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
@@ -27,7 +27,7 @@ if not API_KEY:
     st.error("❌ Missing API key. Please set DEESEEK_API_KEY in Streamlit secrets.")
     st.stop()
 
-# ------------- STYLING -------------
+# ---------- CUSTOM STYLING ----------
 st.markdown("""
     <style>
         .block-container {padding-top: 2rem;}
@@ -42,21 +42,25 @@ st.markdown("""
             border-radius: 10px; display: inline-block;
             max-width: 80%;
         }
+        footer {visibility: hidden;}
+        .footer {
+            position: fixed; bottom: 10px; left: 0; right: 0;
+            text-align: center; color: #888; font-size: 0.8rem;
+        }
+        [data-testid="stSidebar"] {display: none;}
     </style>
+    <div class="footer">Built with ❤️ by [Your Name] | Contact: your@email.com</div>
 """, unsafe_allow_html=True)
 
-st.title("📚 Curriculum Chatbot")
+# ---------- BRANDING ----------
+st.image("logo.png", width=80)
+st.title("📚 school llm")
 
-# ------------- SIDEBAR -------------
-with st.sidebar:
-    st.subheader("ℹ️ Info")
-    st.info("🟢 Using prebuilt general FAISS index.")
-
-# ------------- SESSION STATE -------------
+# ---------- SESSION STATE ----------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# ------------- LLM SETUP -------------
+# ---------- LLM SETUP ----------
 if "qa_chain" not in st.session_state:
     with st.spinner("🧠 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
@@ -71,13 +75,13 @@ if "qa_chain" not in st.session_state:
         SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-        # Use prebuilt general FAISS index
+        # Load prebuilt FAISS index
         index_path = os.path.join("faiss_indexes", "faiss_index_general")
         if os.path.exists(index_path):
             vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
             st.success("📦 Loaded general FAISS index.")
         else:
-            st.error("❌ General FAISS index not found. Please ensure it's in faiss_indexes/faiss_index_general/")
+            st.error("❌ General FAISS index not found.")
             st.stop()
 
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
@@ -90,7 +94,7 @@ if "qa_chain" not in st.session_state:
         )
         st.session_state.qa_chain = chain
 
-# ------------- CHAT DISPLAY -------------
+# ---------- CHAT DISPLAY ----------
 if "qa_chain" in st.session_state:
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
@@ -108,7 +112,6 @@ if "qa_chain" in st.session_state:
                     result = st.session_state.qa_chain({"question": user_input})
                     answer = result["answer"]
 
-                    # Clean up AI responses
                     for phrase in [
                         "from the provided context", "based on the context provided",
                         "according to the information provided", "from what I can gather"
@@ -120,7 +123,6 @@ if "qa_chain" in st.session_state:
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    # Log to CSV
                     if not os.path.exists("qa_log.csv"):
                         with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
                             csv.writer(f).writerow(["Question", "Answer"])
@@ -129,7 +131,7 @@ if "qa_chain" in st.session_state:
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-    # ------------- DOWNLOAD HISTORY -------------
+    # ---------- DOWNLOAD CHAT HISTORY ----------
     if st.session_state.chat_history:
         st.divider()
         st.subheader("📥 Download Chat History")
