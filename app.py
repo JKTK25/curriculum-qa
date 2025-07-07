@@ -8,8 +8,8 @@ from sentence_transformers import SentenceTransformer
 from langchain_community.document_loaders import (
     PyMuPDFLoader, Docx2txtLoader, TextLoader, JSONLoader
 )
+from langchain_community.vectorstores import FAISS  # ✅ updated
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
