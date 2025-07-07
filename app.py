@@ -1,12 +1,12 @@
 import os
 import csv
 import io
-import openai
 import uuid
+import openai
 import streamlit as st
-from tqdm import tqdm
+import firebase_admin
+from firebase_admin import credentials, firestore
 from huggingface_hub import hf_hub_download
-from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -14,8 +14,6 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-import firebase_admin
-from firebase_admin import credentials, firestore
 
 # ------------- CONFIG -------------
 st.set_page_config(page_title="📚 School AI", layout="centered")
@@ -26,12 +24,16 @@ if not API_KEY:
     st.stop()
 
 # ------------- FIREBASE INIT -------------
-if not firebase_admin._apps:
+if "firebase_app" not in st.session_state:
     if "FIREBASE" in st.secrets:
-        cred = credentials.Certificate(st.secrets["FIREBASE"])
+        cred = credentials.Certificate(dict(st.secrets["FIREBASE"]))
     else:
         cred = credentials.Certificate("firebase_key.json")  # Local fallback
-    firebase_admin.initialize_app(cred)
+    try:
+        firebase_admin.initialize_app(cred)
+    except ValueError:
+        pass  # Already initialized
+    st.session_state.firebase_app = True
 
 db = firestore.client()
 
@@ -66,12 +68,13 @@ st.markdown("""
         }
         .download-footer {
             position: fixed;
-            bottom: 6px;
-            right: 6px;
+            bottom: 5px;
+            right: 5px;
             background-color: #f0f2f6;
-            padding: 6px 10px;
+            padding: 6px;
             border-radius: 6px;
             font-size: 11px;
+            box-shadow: 0px 0px 4px rgba(0,0,0,0.1);
         }
         .quick-queries {
             margin-top: 2rem;
@@ -91,7 +94,7 @@ if "qa_chain" not in st.session_state:
 
 # ------------- LLM SETUP -------------
 if st.session_state.qa_chain is None:
-    with st.spinner("🧐 Initializing chatbot..."):
+    with st.spinner("🧠 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
         openai.api_key = API_KEY
 
@@ -102,7 +105,6 @@ if st.session_state.qa_chain is None:
             temperature=0.3
         )
 
-        SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
         HF_REPO_ID = "JK-TK/curriculum-faiss-index"
@@ -141,7 +143,7 @@ if st.session_state.qa_chain:
         st.session_state.user_input = user_input
 
     st.markdown("<div class='quick-queries'>", unsafe_allow_html=True)
-    st.markdown("### 🔎 Quick queries:")
+    st.markdown("### 🔎 Quick Queries:")
     with st.container():
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -176,14 +178,13 @@ if st.session_state.qa_chain:
                     st.session_state.chat_history.append(("user", query))
                     st.session_state.chat_history.append(("assistant", answer))
 
+                    log_chat(st.session_state.user_id, query, answer)
+
                     with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
                         writer = csv.writer(f)
                         if f.tell() == 0:
                             writer.writerow(["Question", "Answer"])
                         writer.writerow([query, answer])
-
-                    log_chat(st.session_state.user_id, query, answer)
-
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
@@ -196,5 +197,5 @@ if st.session_state.chat_history:
     txt_bytes = txt_buffer.getvalue().encode("utf-8")
 
     st.markdown("<div class='download-footer'>", unsafe_allow_html=True)
-    st.download_button("⬇️ Chat TXT", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
+    st.download_button("⬇️ Chat (TXT)", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
     st.markdown("</div>", unsafe_allow_html=True)
