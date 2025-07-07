@@ -49,12 +49,12 @@ st.markdown("""
         }
         [data-testid="stSidebar"] {display: none;}
     </style>
-    <div class="footer">Built with ❤️ by [Your Name] | Contact: jamexkarix583@gmail.com </div>
+    <div class="footer">Built with ❤️ by [James Kariuki] | Contact: jamexkarix583@gmail.com </div>
 """, unsafe_allow_html=True)
 
 # ---------- BRANDING ----------
-st.image("logo.png", width=80)
-st.title("📚 school llm")
+st.image("st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/368px-Google_2015_logo.svg.png", width=100)", width=80)
+st.title("📚 school AI")
 
 # ---------- SESSION STATE ----------
 if "chat_history" not in st.session_state:
