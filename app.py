@@ -38,12 +38,6 @@ st.markdown("""
 
 st.title("📚 Curriculum Chatbot")
 
-# ----------- LOAD API KEY SECURELY -----------
-api_key = os.getenv("DEESEEK_API_KEY")
-if not api_key:
-    st.error("❌ API key not found. Please set DEESEEK_API_KEY in Streamlit secrets.")
-    st.stop()
-
 # ----------- SIDEBAR -----------
 with st.sidebar:
     st.subheader("📁 Upload Curriculum Files")
@@ -51,6 +45,12 @@ with st.sidebar:
     if st.button("🔄 Reset Chat"):
         st.session_state.clear()
         st.experimental_rerun()
+
+# ----------- SECURE API KEY -----------
+api_key = os.getenv("DEESEEK_API_KEY")
+if not api_key:
+    st.error("❌ API key not found. Please set DEESEEK_API_KEY in Streamlit secrets.")
+    st.stop()
 
 # ----------- SESSION MEMORY -----------
 if "chat_history" not in st.session_state:
@@ -136,7 +136,7 @@ if "qa_chain" in st.session_state:
                     result = st.session_state.qa_chain({"question": user_input})
                     answer = result["answer"]
 
-                    # Remove boilerplate phrases
+                    # Remove generic boilerplate phrases
                     for phrase in [
                         "from the provided context", "based on the context provided",
                         "according to the information provided", "from what I can gather"
@@ -145,7 +145,7 @@ if "qa_chain" in st.session_state:
 
                     st.markdown(answer)
 
-                    # Save history
+                    # Save to chat history
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", answer))
 
@@ -159,7 +159,7 @@ if "qa_chain" in st.session_state:
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-    # ----------- DOWNLOAD CHAT LOG -----------
+    # ----------- DOWNLOAD CHAT LOGS -----------
     if st.session_state.chat_history:
         csv_buffer = io.StringIO()
         csv_writer = csv.writer(csv_buffer)
@@ -175,9 +175,9 @@ if "qa_chain" in st.session_state:
         text_bytes = text_buffer.getvalue().encode("utf-8")
 
         st.divider()
-        st.subheader("📥 Download Your Conversation")
+        st.subheader("📥 Download Chat History")
         col1, col2 = st.columns(2)
         with col1:
-            st.download_button("⬇️ Download as CSV", data=csv_bytes, file_name="chat_history.csv", mime="text/csv")
+            st.download_button("⬇️ CSV", data=csv_bytes, file_name="chat_history.csv", mime="text/csv")
         with col2:
-            st.download_button("⬇️ Download as Text", data=text_bytes, file_name="chat_history.txt", mime="text/plain")
+            st.download_button("⬇️ TXT", data=text_bytes, file_name="chat_history.txt", mime="text/plain")
