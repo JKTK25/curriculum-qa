@@ -1,4 +1,8 @@
-import os import csv import io import openai import uuid import time import streamlit as st from huggingface_hub import hf_hub_download from langchain_community.vectorstores import FAISS from langchain.text_splitter import RecursiveCharacterTextSplitter from langchain_huggingface import HuggingFaceEmbeddings from langchain.chains import ConversationalRetrievalChain from langchain.memory import ConversationBufferMemory from langchain_openai import ChatOpenAI from langchain.prompts import ChatPromptTemplate from langchain.callbacks.base import BaseCallbackHandler import firebase_admin from firebase_admin import credentials, firestore
+import os import csv import io import openai import uuid import time import streamlit as st
+
+from huggingface_hub import hf_hub_download from langchain_community.vectorstores import FAISS from langchain.text_splitter import RecursiveCharacterTextSplitter from langchain_huggingface import HuggingFaceEmbeddings from langchain.chains import ConversationalRetrievalChain from langchain.memory import ConversationBufferMemory from langchain_openai import ChatOpenAI from langchain.prompts import ChatPromptTemplate from langchain.callbacks.base import BaseCallbackHandler
+
+import firebase_admin from firebase_admin import credentials, firestore
 
 ----- Streamlit LLM Stream Handler -----
 
@@ -110,3 +114,4 @@ if st.session_state.chat_history: txt_buffer = io.StringIO() for role, msg in st
 st.markdown("<div class='download-footer'>", unsafe_allow_html=True)
 st.download_button("⬇️ Download Chat (TXT)", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
 st.markdown("</div>", unsafe_allow_html=True)
+
