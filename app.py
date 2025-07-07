@@ -18,7 +18,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 import firebase_admin 
 from firebase_admin import credentials, firestore
 
------ Streamlit LLM Stream Handler -----
+----- Streamlittream Handler -----
 
 class StreamlitCallbackHandler(BaseCallbackHandler): def init(self, container): self.container = container self.text = ""
 
