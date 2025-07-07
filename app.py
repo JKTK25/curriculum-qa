@@ -18,7 +18,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 import firebase_admin 
 from firebase_admin import credentials, firestore
 
------ Streamlittream Handler -----
+#----- Streamlittream Handler -----
 
 class StreamlitCallbackHandler(BaseCallbackHandler): def init(self, container): self.container = container self.text = ""
 
@@ -27,11 +27,11 @@ def on_llm_new_token(self, token: str, **kwargs) -> None:
     self.container.markdown(self.text + "▌")
     time.sleep(0.01)
 
-------------- CONFIG -------------
+#------------- CONFIG -------------
 
 st.set_page_config(page_title="📚 School AI", layout="centered") API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY") if not API_KEY: st.error("❌ Missing API key. Please set DEESEEK_API_KEY in Streamlit secrets.") st.stop()
 
-------------- FIREBASE INIT -------------
+#------------- FIREBASE INIT -------------
 
 if "firebase_app" not in st.session_state: if "FIREBASE" in st.secrets: cred = credentials.Certificate(dict(st.secrets["FIREBASE"])) else: cred = credentials.Certificate("firebase_key.json") if not firebase_admin._apps: firebase_admin.initialize_app(cred) st.session_state.firebase_app = True
 
@@ -41,7 +41,7 @@ def log_chat(user_id, question, answer): db.collection("chat_logs").document(use
 
 def load_chat_history_from_firebase(user_id): chat_ref = db.collection("chat_logs").document(user_id).collection("history").order_by("timestamp") chat_docs = chat_ref.stream() history = [] for doc in chat_docs: data = doc.to_dict() history.append(("user", data["question"])) history.append(("assistant", data["answer"])) return history
 
-------------- CACHED COMPONENTS -------------
+#------------- CACHED COMPONENTS -------------
 
 @st.cache_resource def load_embeddings(): return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
@@ -49,11 +49,11 @@ def load_chat_history_from_firebase(user_id): chat_ref = db.collection("chat_log
 
 @st.cache_resource def load_memory(): return ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-------------- INIT QA CHAIN -------------
+#------------- INIT QA CHAIN -------------
 
 if "chat_history" not in st.session_state: st.session_state.chat_history = load_chat_history_from_firebase(st.session_state.user_id)
 
-------------- HEADER UI -------------
+#------------- HEADER UI -------------
 
 st.image("https://static.mycareersfuture.gov.sg/images/company/logos/b9b623bfe890ac230ac57629e84742ba/lark-technologies.png", width=100) st.title("📚 School AI")
 
@@ -89,7 +89,7 @@ st.markdown("""
     }
 </style>""", unsafe_allow_html=True)
 
-------------- CHAT DISPLAY -------------
+#------------- CHAT DISPLAY -------------
 
 if st.session_state.chat_history: for role, msg in st.session_state.chat_history: with st.chat_message(role): st.markdown(msg)
 
@@ -121,7 +121,7 @@ with st.chat_message("assistant"):
         st.session_state.chat_history.append(("assistant", answer))
         log_chat(st.session_state.user_id, user_input, answer)
 
-------------- DOWNLOAD CHAT -------------
+#------------- DOWNLOAD CHAT -------------
 
 if st.session_state.chat_history: txt_buffer = io.StringIO() for role, msg in st.session_state.chat_history: speaker = "You" if role == "user" else "Bot" txt_buffer.write(f"{speaker}: {msg}\n{'-'*50}\n") txt_bytes = txt_buffer.getvalue().encode("utf-8")
 
