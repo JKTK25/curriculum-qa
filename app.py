@@ -23,7 +23,7 @@ if not API_KEY:
     st.stop()
 
 # ------------- HEADER & STYLING -------------
-st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/368px-Google_2015_logo.svg.png", width=100)
+st.image("https://static.mycareersfuture.gov.sg/images/company/logos/b9b623bfe890ac230ac57629e84742ba/lark-technologies.png", width=100)
 st.title("📚 School AI")
 
 st.markdown("""
