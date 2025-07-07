@@ -13,6 +13,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
+from langchain_core.chat_history import ChatMessageHistory
 from langchain_openai import ChatOpenAI
 import openai
 
@@ -91,13 +92,20 @@ if api_key and uploaded_files:
             vectorstore = FAISS.from_documents(chunks, embeddings)
 
             retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-            memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+            # ✅ Updated Memory API (no warning)
+            memory = ConversationBufferMemory(
+                memory_key="chat_history",
+                return_messages=True,
+                chat_memory=ChatMessageHistory()
+            )
 
             chain = ConversationalRetrievalChain.from_llm(
                 llm=llm,
                 retriever=retriever,
                 memory=memory
             )
+
             st.session_state.qa_chain = chain
 
 # ----------- CHAT LOOP -----------
