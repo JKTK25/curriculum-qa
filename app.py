@@ -19,7 +19,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 
 # ---------- CONFIG ----------
-st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
+st.set_page_config(page_title="📚 School AI", layout="centered")
 DEMO_MODE = st.secrets.get("DEMO_MODE", False)
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
 
@@ -49,7 +49,7 @@ st.markdown("""
         }
         [data-testid="stSidebar"] {display: none;}
     </style>
-    <div class="footer">Built with ❤️ by [Your Name] | Contact: your@email.com</div>
+    <div class="footer">Built with ❤️ by [Your Name] | Contact: jamexkarix583@gmail.com </div>
 """, unsafe_allow_html=True)
 
 # ---------- BRANDING ----------
