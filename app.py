@@ -12,9 +12,11 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain 
 from langchain.memory import ConversationBufferMemory 
-from langchain_openai import ChatOpenAI from langchain.prompts import ChatPromptTemplate 
+from langchain_openai import ChatOpenAI 
+from langchain.prompts import ChatPromptTemplate 
 from langchain.callbacks.base import BaseCallbackHandler
-import firebase_admin from firebase_admin import credentials, firestore
+import firebase_admin 
+from firebase_admin import credentials, firestore
 
 ----- Streamlit LLM Stream Handler -----
 
