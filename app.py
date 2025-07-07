@@ -13,7 +13,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 
 # ------------- CONFIG -------------
-st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
+st.set_page_config(page_title="📚 school AI", layout="centered")
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
 
 if not API_KEY:
@@ -22,7 +22,7 @@ if not API_KEY:
 
 # ------------- HEADER & STYLING -------------
 st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/368px-Google_2015_logo.svg.png", width=100)
-st.title("📚 Curriculum Chatbot")
+st.title("📚 school AI")
 
 st.markdown("""
     <style>
