@@ -6,8 +6,14 @@ import uuid
 import time 
 import streamlit as st
 
-from huggingface_hub import hf_hub_download from langchain_community.vectorstores import FAISS from langchain.text_splitter import RecursiveCharacterTextSplitter from langchain_huggingface import HuggingFaceEmbeddings from langchain.chains import ConversationalRetrievalChain from langchain.memory import ConversationBufferMemory from langchain_openai import ChatOpenAI from langchain.prompts import ChatPromptTemplate from langchain.callbacks.base import BaseCallbackHandler
-
+from huggingface_hub import hf_hub_download 
+from langchain_community.vectorstores import FAISS 
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.chains import ConversationalRetrievalChain 
+from langchain.memory import ConversationBufferMemory 
+from langchain_openai import ChatOpenAI from langchain.prompts import ChatPromptTemplate 
+from langchain.callbacks.base import BaseCallbackHandler
 import firebase_admin from firebase_admin import credentials, firestore
 
 ----- Streamlit LLM Stream Handler -----
