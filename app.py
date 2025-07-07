@@ -100,7 +100,6 @@ if api_key and uploaded_files:
 
             retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
-            # ✅ Classic memory setup (no ChatMessageHistory)
             memory = ConversationBufferMemory(
                 memory_key="chat_history",
                 return_messages=True
@@ -114,29 +113,39 @@ if api_key and uploaded_files:
 
             st.session_state.qa_chain = chain
 
-# ----------- CHAT LOOP -----------
+# ----------- DISPLAY CHAT HISTORY (top to bottom) -----------
 if "qa_chain" in st.session_state:
-    user_input = st.chat_input("💬 Ask a question about your curriculum")
-    if user_input:
-        with st.spinner("🤖 Thinking..."):
-            try:
-                result = st.session_state.qa_chain({"question": user_input})
-                answer = result["answer"]
-                st.session_state.chat_history.append(("user", user_input))
-                st.session_state.chat_history.append(("assistant", answer))
-
-                # Save log
-                if not os.path.exists("qa_log.csv"):
-                    with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
-                        csv.writer(f).writerow(["Question", "Answer"])
-                with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
-                    csv.writer(f).writerow([user_input, answer])
-            except Exception as e:
-                st.error(f"⚠️ Error: {e}")
-
-    # Display messages
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
             st.markdown(msg)
+
+    # ----------- USER INPUT AND THINKING SPINNER (BOTTOM) -----------
+    user_input = st.chat_input("💬 Ask a question about your curriculum")
+
+    if user_input:
+        # Show user message immediately
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        with st.chat_message("assistant"):
+            with st.spinner("🤖 Thinking..."):
+                try:
+                    result = st.session_state.qa_chain({"question": user_input})
+                    answer = result["answer"]
+                    st.markdown(answer)
+
+                    # Save to chat history
+                    st.session_state.chat_history.append(("user", user_input))
+                    st.session_state.chat_history.append(("assistant", answer))
+
+                    # Save to CSV log
+                    if not os.path.exists("qa_log.csv"):
+                        with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
+                            csv.writer(f).writerow(["Question", "Answer"])
+                    with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
+                        csv.writer(f).writerow([user_input, answer])
+
+                except Exception as e:
+                    st.error(f"⚠️ Error: {e}")
 else:
     st.info("⬅️ Enter API key and upload files to begin.")
