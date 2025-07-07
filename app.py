@@ -4,6 +4,7 @@ import io
 import uuid
 import openai
 import streamlit as st
+from tqdm import tqdm
 from huggingface_hub import hf_hub_download
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -15,24 +16,20 @@ from langchain.prompts import ChatPromptTemplate
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ---------------- CONFIG ----------------
+# ---------- CONFIG ----------
 st.set_page_config(page_title="📚 School AI", layout="centered")
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
-
 if not API_KEY:
     st.error("❌ Missing API key. Please set DEESEEK_API_KEY in Streamlit secrets.")
     st.stop()
 
-# ---------------- FIREBASE ----------------
+# ---------- FIREBASE INIT ----------
 if "firebase_app" not in st.session_state:
     if "FIREBASE" in st.secrets:
         cred = credentials.Certificate(dict(st.secrets["FIREBASE"]))
     else:
         cred = credentials.Certificate("firebase_key.json")
-    try:
-        firebase_admin.initialize_app(cred)
-    except ValueError:
-        pass  # already initialized
+    firebase_admin.initialize_app(cred, name="school_ai")
     st.session_state.firebase_app = True
 
 db = firestore.client()
@@ -48,52 +45,42 @@ def log_chat(user_id, question, answer):
         "timestamp": firestore.SERVER_TIMESTAMP
     })
 
-# ---------------- UI HEADER ----------------
+# ---------- HEADER & STYLING ----------
 st.image("https://static.mycareersfuture.gov.sg/images/company/logos/b9b623bfe890ac230ac57629e84742ba/lark-technologies.png", width=100)
 st.title("📚 School AI")
-
 st.markdown("""
-    <style>
-        .block-container {padding-top: 2rem;}
-        .stChatMessage.user {text-align: right;}
-        .stChatMessage.user .stMarkdown {
-            background-color: #DCF8C6; padding: 0.8rem 1rem;
-            border-radius: 10px; display: inline-block;
-            max-width: 80%;
-        }
-        .stChatMessage.assistant .stMarkdown {
-            background-color: #F1F0F0; padding: 0.8rem 1rem;
-            border-radius: 10px; display: inline-block;
-            max-width: 80%;
-        }
-        .download-footer {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            background-color: #f0f2f6;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 12px;
-        }
-        .quick-queries {
-            margin-top: 2rem;
-        }
-        .stButton>button {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.8rem;
-        }
-    </style>
+<style>
+    .block-container {padding-top: 2rem;}
+    .stChatMessage.user {text-align: right;}
+    .stChatMessage.user .stMarkdown {
+        background-color: #DCF8C6; padding: 0.8rem 1rem;
+        border-radius: 10px; display: inline-block;
+        max-width: 80%;
+    }
+    .stChatMessage.assistant .stMarkdown {
+        background-color: #F1F0F0; padding: 0.8rem 1rem;
+        border-radius: 10px; display: inline-block;
+        max-width: 80%;
+    }
+    .download-footer {
+        position: fixed; bottom: 10px; right: 10px;
+        background-color: #f0f2f6; padding: 10px;
+        border-radius: 8px; font-size: 12px;
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# ---------------- SESSION STATE ----------------
+# ---------- SESSION STATE ----------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "qa_chain" not in st.session_state:
     st.session_state.qa_chain = None
 
-# ---------------- LLM SETUP ----------------
+# ---------- LLM SETUP ----------
 if st.session_state.qa_chain is None:
     with st.spinner("🧐 Initializing chatbot..."):
+        os.environ["TORCH_FORCE_METAL"] = "false"  # Avoid PyTorch meta tensor issues
+
         openai.api_base = "https://api.deepseek.com/v1"
         openai.api_key = API_KEY
 
@@ -105,8 +92,7 @@ if st.session_state.qa_chain is None:
         )
 
         embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"}  # ✅ Force CPU for Streamlit
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
         HF_REPO_ID = "JK-TK/curriculum-faiss-index"
@@ -117,7 +103,7 @@ if st.session_state.qa_chain is None:
         hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
 
         vectorstore = FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
-        st.success("📦 FAISS index loaded from Hugging Face Hub.")
+        st.success("📦 Loaded FAISS index from Hugging Face Hub.")
 
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -132,9 +118,10 @@ if st.session_state.qa_chain is None:
             memory=memory,
             combine_docs_chain_kwargs={"prompt": chat_prompt}
         )
+
         st.session_state.qa_chain = chain
 
-# ---------------- CHAT DISPLAY ----------------
+# ---------- CHAT UI ----------
 if st.session_state.qa_chain:
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
@@ -144,20 +131,17 @@ if st.session_state.qa_chain:
     if user_input:
         st.session_state.user_input = user_input
 
-    st.markdown("<div class='quick-queries'>", unsafe_allow_html=True)
-    st.markdown("### 🔎 Quick Queries:")
-    with st.container():
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("🧬 What is biology?", key="bio"):
-                st.session_state.user_input = "What is biology?"
-        with col2:
-            if st.button("⚗️ What is chemistry?", key="chem"):
-                st.session_state.user_input = "What is chemistry?"
-        with col3:
-            if st.button("➕ Solve: 2x + 10 = 20", key="math"):
-                st.session_state.user_input = "Solve: 2x + 10 = 20"
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("### 🔎 Quick Queries")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🧬 What is biology?"):
+            st.session_state.user_input = "What is biology?"
+    with col2:
+        if st.button("⚗️ What is chemistry?"):
+            st.session_state.user_input = "What is chemistry?"
+    with col3:
+        if st.button("➕ Solve: 2x + 10 = 20"):
+            st.session_state.user_input = "Solve: 2x + 10 = 20"
 
     if "user_input" in st.session_state:
         query = st.session_state.pop("user_input")
@@ -170,6 +154,7 @@ if st.session_state.qa_chain:
                     result = st.session_state.qa_chain({"question": query})
                     answer = result["answer"]
 
+                    # Clean-up common filler phrases
                     for phrase in [
                         "from the provided context", "based on the context provided",
                         "according to the information provided", "from what I can gather"
@@ -180,20 +165,19 @@ if st.session_state.qa_chain:
                     st.session_state.chat_history.append(("user", query))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    # Save to CSV
+                    # Optional CSV log
                     with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
                         writer = csv.writer(f)
                         if f.tell() == 0:
                             writer.writerow(["Question", "Answer"])
                         writer.writerow([query, answer])
 
-                    # Save to Firestore
                     log_chat(st.session_state.user_id, query, answer)
 
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-# ---------------- DOWNLOAD CHAT HISTORY ----------------
+# ---------- DOWNLOAD CHAT HISTORY ----------
 if st.session_state.chat_history:
     txt_buffer = io.StringIO()
     for role, msg in st.session_state.chat_history:
