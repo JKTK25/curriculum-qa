@@ -67,8 +67,8 @@ if "qa_chain" not in st.session_state:
         LOCAL_INDEX_DIR = "faiss_index_general"
         os.makedirs(LOCAL_INDEX_DIR, exist_ok=True)
 
-        faiss_file = hf_hub_download(repo_id=JK-TK/curriculum-faiss-index, filename="index.faiss", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
-        pkl_file = hf_hub_download(repo_id=JK-TK/curriculum-faiss-index, filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
+        faiss_file = hf_hub_download(repo_id="JK-TK/curriculum-faiss-index", filename="index.faiss", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
+        pkl_file = hf_hub_download(repo_id="JK-TK/curriculum-faiss-index", filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
 
         vectorstore = FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
         st.success("📦 Loaded FAISS index from Hugging Face Hub.")
