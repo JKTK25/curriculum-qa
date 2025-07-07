@@ -3,6 +3,8 @@ import csv
 import tempfile
 import streamlit as st
 from tqdm import tqdm
+import io
+import openai
 
 from sentence_transformers import SentenceTransformer
 from langchain_community.document_loaders import (
@@ -14,7 +16,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
-import openai
 
 # ----------- UI CONFIG -----------
 st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
@@ -50,7 +51,7 @@ with st.sidebar:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# ----------- SETUP -----------
+# ----------- SETUP LLM & CHAIN -----------
 if api_key and uploaded_files:
     if "qa_chain" not in st.session_state:
         with st.spinner("🧠 Initializing chatbot..."):
@@ -97,7 +98,6 @@ if api_key and uploaded_files:
             SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
             vectorstore = FAISS.from_documents(chunks, embeddings)
-
             retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
             memory = ConversationBufferMemory(
@@ -119,11 +119,10 @@ if "qa_chain" in st.session_state:
         with st.chat_message(role):
             st.markdown(msg)
 
-    # ----------- USER INPUT AND THINKING SPINNER (BOTTOM) -----------
+    # ----------- INPUT AND RESPONSE -----------
     user_input = st.chat_input("💬 Ask a question about your curriculum")
 
     if user_input:
-        # Show user message immediately
         with st.chat_message("user"):
             st.markdown(user_input)
 
@@ -132,9 +131,22 @@ if "qa_chain" in st.session_state:
                 try:
                     result = st.session_state.qa_chain({"question": user_input})
                     answer = result["answer"]
+
+                    # 🔍 Clean repetitive phrases
+                    unwanted_phrases = [
+                        "from the provided context",
+                        "based on the context provided",
+                        "according to the information provided",
+                        "according to the information given",
+                        "from what I can gather",
+                        "based on the documents"
+                    ]
+                    for phrase in unwanted_phrases:
+                        answer = answer.replace(phrase, "").strip()
+
                     st.markdown(answer)
 
-                    # Save to chat history
+                    # Save to memory
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", answer))
 
@@ -147,5 +159,28 @@ if "qa_chain" in st.session_state:
 
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
+
+    # ----------- DOWNLOAD CHAT -----------
+    if st.session_state.chat_history:
+        csv_buffer = io.StringIO()
+        csv_writer = csv.writer(csv_buffer)
+        csv_writer.writerow(["Role", "Message"])
+        csv_writer.writerows(st.session_state.chat_history)
+        csv_bytes = csv_buffer.getvalue().encode("utf-8")
+
+        text_buffer = io.StringIO()
+        for role, msg in st.session_state.chat_history:
+            speaker = "You" if role == "user" else "Bot"
+            text_buffer.write(f"{speaker}: {msg}\n")
+            text_buffer.write("-" * 50 + "\n")
+        text_bytes = text_buffer.getvalue().encode("utf-8")
+
+        st.divider()
+        st.subheader("📥 Download Your Conversation")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button("⬇️ Download as CSV", data=csv_bytes, file_name="chat_history.csv", mime="text/csv")
+        with col2:
+            st.download_button("⬇️ Download as Text", data=text_bytes, file_name="chat_history.txt", mime="text/plain")
 else:
-    st.info("⬅️ Enter API key and upload files to begin.")
+    st.info("⬅️ Please enter your API key and upload files to begin.")
