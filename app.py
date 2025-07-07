@@ -4,6 +4,7 @@ import io
 import openai
 import uuid
 import streamlit as st
+from tqdm import tqdm
 from huggingface_hub import hf_hub_download
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
@@ -25,13 +26,12 @@ if not API_KEY:
     st.stop()
 
 # ------------- FIREBASE INIT -------------
-if "firebase_app" not in st.session_state:
+if not firebase_admin._apps:
     if "FIREBASE" in st.secrets:
-        cred = credentials.Certificate(dict(st.secrets["FIREBASE"]))
+        cred = credentials.Certificate(st.secrets["FIREBASE"])
     else:
         cred = credentials.Certificate("firebase_key.json")  # Local fallback
     firebase_admin.initialize_app(cred)
-    st.session_state.firebase_app = True
 
 db = firestore.client()
 
@@ -39,7 +39,8 @@ if "user_id" not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
 
 def log_chat(user_id, question, answer):
-    db.collection("chat_logs").document(user_id).collection("history").add({
+    doc_ref = db.collection("chat_logs").document(user_id).collection("history").document()
+    doc_ref.set({
         "question": question,
         "answer": answer,
         "timestamp": firestore.SERVER_TIMESTAMP
@@ -65,12 +66,12 @@ st.markdown("""
         }
         .download-footer {
             position: fixed;
-            bottom: 10px;
-            right: 10px;
+            bottom: 6px;
+            right: 6px;
             background-color: #f0f2f6;
-            padding: 10px;
-            border-radius: 8px;
-            font-size: 12px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 11px;
         }
         .quick-queries {
             margin-top: 2rem;
@@ -90,7 +91,7 @@ if "qa_chain" not in st.session_state:
 
 # ------------- LLM SETUP -------------
 if st.session_state.qa_chain is None:
-    with st.spinner("🤔 Initializing chatbot..."):
+    with st.spinner("🧐 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
         openai.api_key = API_KEY
 
@@ -135,25 +136,24 @@ if st.session_state.qa_chain:
         with st.chat_message(role):
             st.markdown(msg)
 
-    if not st.session_state.chat_history:
-        st.markdown("<div class='quick-queries'>", unsafe_allow_html=True)
-        st.markdown("### 🔎 Quick queries:")
-        with st.container():
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("🧬 What is biology?", key="bio"):
-                    st.session_state.user_input = "What is biology?"
-            with col2:
-                if st.button("\u2697\ufe0f What is chemistry?", key="chem"):
-                    st.session_state.user_input = "What is chemistry?"
-            with col3:
-                if st.button("➕ Solve: 2x + 10 = 20", key="math"):
-                    st.session_state.user_input = "Solve: 2x + 10 = 20"
-        st.markdown("</div>", unsafe_allow_html=True)
-
     user_input = st.chat_input("💬 Ask a question about your curriculum")
     if user_input:
         st.session_state.user_input = user_input
+
+    st.markdown("<div class='quick-queries'>", unsafe_allow_html=True)
+    st.markdown("### 🔎 Quick queries:")
+    with st.container():
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("🧬 What is biology?", key="bio"):
+                st.session_state.user_input = "What is biology?"
+        with col2:
+            if st.button("⚗️ What is chemistry?", key="chem"):
+                st.session_state.user_input = "What is chemistry?"
+        with col3:
+            if st.button("➕ Solve: 2x + 10 = 20", key="math"):
+                st.session_state.user_input = "Solve: 2x + 10 = 20"
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if "user_input" in st.session_state:
         query = st.session_state.pop("user_input")
@@ -176,17 +176,18 @@ if st.session_state.qa_chain:
                     st.session_state.chat_history.append(("user", query))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    log_chat(st.session_state.user_id, query, answer)
-
                     with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
                         writer = csv.writer(f)
                         if f.tell() == 0:
                             writer.writerow(["Question", "Answer"])
                         writer.writerow([query, answer])
+
+                    log_chat(st.session_state.user_id, query, answer)
+
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-# ------------- DOWNLOAD CHAT HISTORY (Text only) -------------
+# ------------- DOWNLOAD CHAT HISTORY -------------
 if st.session_state.chat_history:
     txt_buffer = io.StringIO()
     for role, msg in st.session_state.chat_history:
@@ -195,5 +196,5 @@ if st.session_state.chat_history:
     txt_bytes = txt_buffer.getvalue().encode("utf-8")
 
     st.markdown("<div class='download-footer'>", unsafe_allow_html=True)
-    st.download_button("⬇️ Download Chat (TXT)", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
+    st.download_button("⬇️ Chat TXT", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
     st.markdown("</div>", unsafe_allow_html=True)
