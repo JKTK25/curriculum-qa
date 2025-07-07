@@ -8,7 +8,7 @@ from sentence_transformers import SentenceTransformer
 from langchain_community.document_loaders import (
     PyMuPDFLoader, Docx2txtLoader, TextLoader, JSONLoader
 )
-from langchain_community.vectorstores import FAISS  # ✅ updated
+from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
@@ -16,131 +16,113 @@ from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 import openai
 
-# ---------------- App Config ----------------
-st.set_page_config(page_title="📚 Curriculum Chatbot", layout="wide")
-st.title("📚 Curriculum Chatbot with Memory")
-st.markdown("Upload your curriculum files and ask questions — now with chat-style memory!")
+# ----------- UI CONFIG -----------
+st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
+st.markdown("""
+    <style>
+        .block-container {padding-top: 2rem;}
+        .stChatMessage.user {text-align: right;}
+        .stChatMessage.user .stMarkdown {background-color: #DCF8C6; padding: 0.8rem 1rem; border-radius: 10px; display: inline-block; max-width: 80%;}
+        .stChatMessage.assistant .stMarkdown {background-color: #F1F0F0; padding: 0.8rem 1rem; border-radius: 10px; display: inline-block; max-width: 80%;}
+    </style>
+""", unsafe_allow_html=True)
 
-# ---------------- Optional Password Gate ----------------
-REQUIRE_PASSWORD = False  # Set to True to enable password gate
-APP_PASSWORD = "letmein"  # You can change this password
+st.title("📚 Curriculum Chatbot")
 
-if REQUIRE_PASSWORD:
-    pw = st.text_input("🔒 Enter App Password", type="password")
-    if pw != APP_PASSWORD:
-        st.stop()
-
-# ---------------- Sidebar ----------------
+# ----------- SIDEBAR -----------
 with st.sidebar:
-    st.subheader("🔐 DeepSeek API Key")
-    api_key = st.text_input("Paste your key here", type="password")
-
+    st.subheader("🔐 API & Upload")
+    api_key = st.text_input("DeepSeek API Key", type="password")
     uploaded_files = st.file_uploader("📁 Upload curriculum files", accept_multiple_files=True)
-    if st.button("🔄 Reset Conversation"):
+    if st.button("🔄 Reset Chat"):
         st.session_state.clear()
         st.experimental_rerun()
 
-# ---------------- Session State ----------------
+# ----------- SESSION MEMORY -----------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# ---------------- Start Processing ----------------
+# ----------- SETUP -----------
 if api_key and uploaded_files:
-    with st.spinner("🧠 Setting up chatbot..."):
+    if "qa_chain" not in st.session_state:
+        with st.spinner("🧠 Initializing chatbot..."):
+            openai.api_base = "https://api.deepseek.com/v1"
+            openai.api_key = api_key
+            llm = ChatOpenAI(
+                model="deepseek-chat",
+                openai_api_key=api_key,
+                openai_api_base="https://api.deepseek.com/v1",
+                temperature=0.3
+            )
 
-        # Set DeepSeek via OpenAI-style API
-        openai.api_base = "https://api.deepseek.com/v1"
-        openai.api_key = api_key
-        llm = ChatOpenAI(
-            model="deepseek-chat",
-            openai_api_key=api_key,
-            openai_api_base="https://api.deepseek.com/v1",
-            temperature=0.3
-        )
+            temp_dir = tempfile.mkdtemp()
+            all_docs = []
+            for file in uploaded_files:
+                path = os.path.join(temp_dir, file.name)
+                with open(path, "wb") as f:
+                    f.write(file.getbuffer())
 
-        # Save uploaded files to temp dir
-        temp_dir = tempfile.mkdtemp()
-        all_files = []
-        for file in uploaded_files:
-            file_path = os.path.join(temp_dir, file.name)
-            with open(file_path, "wb") as f:
-                f.write(file.getbuffer())
-            all_files.append(file_path)
+                ext = os.path.splitext(path)[1].lower()
+                try:
+                    if ext == ".pdf":
+                        loader = PyMuPDFLoader(path)
+                    elif ext == ".docx":
+                        loader = Docx2txtLoader(path)
+                    elif ext == ".txt":
+                        loader = TextLoader(path)
+                    elif ext == ".jsonl":
+                        loader = JSONLoader(path, text_key="text")
+                    else:
+                        continue
+                    docs = loader.load()
+                    all_docs.extend(docs)
+                except Exception as e:
+                    st.warning(f"⚠️ Could not load {file.name}: {e}")
 
-        # Load documents
-        supported_exts = {".pdf", ".docx", ".txt", ".jsonl"}
-        all_docs = []
-        for file_path in tqdm(all_files, disable=True):
-            ext = os.path.splitext(file_path)[1].lower()
-            try:
-                if ext == ".pdf":
-                    loader = PyMuPDFLoader(file_path)
-                elif ext == ".docx":
-                    loader = Docx2txtLoader(file_path)
-                elif ext == ".txt":
-                    loader = TextLoader(file_path)
-                elif ext == ".jsonl":
-                    loader = JSONLoader(file_path, text_key="text")
-                else:
-                    continue
-                docs = loader.load()
-                all_docs.extend(docs)
-            except Exception as e:
-                st.warning(f"⚠️ Could not load {file_path}: {e}")
+            if not all_docs:
+                st.error("❌ No documents loaded.")
+                st.stop()
 
-        if not all_docs:
-            st.error("❌ No documents were successfully loaded.")
-            st.stop()
+            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+            chunks = splitter.split_documents(all_docs)
 
-        # Split and embed
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        split_docs = splitter.split_documents(all_docs)
+            SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            vectorstore = FAISS.from_documents(chunks, embeddings)
 
-        SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        vectorstore = FAISS.from_documents(split_docs, embedding_model)
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+            memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-        # Memory + Retrieval Chain
-        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-        qa_chain = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=retriever,
-            memory=memory,
-            return_source_documents=False
-        )
+            chain = ConversationalRetrievalChain.from_llm(
+                llm=llm,
+                retriever=retriever,
+                memory=memory
+            )
+            st.session_state.qa_chain = chain
 
-        st.session_state.qa_chain = qa_chain
-
-    st.success("✅ Chatbot is ready! Ask your curriculum questions below.")
-
-# ---------------- Chat UI ----------------
+# ----------- CHAT LOOP -----------
 if "qa_chain" in st.session_state:
-    user_input = st.chat_input("💬 Ask something about your curriculum")
+    user_input = st.chat_input("💬 Ask a question about your curriculum")
     if user_input:
-        with st.spinner("💡 Thinking..."):
+        with st.spinner("🤖 Thinking..."):
             try:
                 result = st.session_state.qa_chain({"question": user_input})
                 answer = result["answer"]
-
                 st.session_state.chat_history.append(("user", user_input))
-                st.session_state.chat_history.append(("bot", answer))
+                st.session_state.chat_history.append(("assistant", answer))
 
-                # Save to CSV
+                # Save log
                 if not os.path.exists("qa_log.csv"):
                     with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
                         csv.writer(f).writerow(["Question", "Answer"])
                 with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
                     csv.writer(f).writerow([user_input, answer])
-
             except Exception as e:
-                st.error(f"❌ Error: {e}")
+                st.error(f"⚠️ Error: {e}")
 
-    # Show full conversation
-    for role, text in st.session_state.chat_history:
-        if role == "user":
-            st.chat_message("user").markdown(text)
-        else:
-            st.chat_message("assistant").markdown(text)
+    # Display messages
+    for role, msg in st.session_state.chat_history:
+        with st.chat_message(role):
+            st.markdown(msg)
 else:
-    st.info("⬅️ Enter your API key and upload documents to begin.")
+    st.info("⬅️ Enter API key and upload files to begin.")
