@@ -3,7 +3,6 @@ import csv
 import io
 import openai
 import streamlit as st
-from tqdm import tqdm
 from huggingface_hub import hf_hub_download
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
@@ -13,7 +12,7 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 
-# ------------- CONFIG -------------
+# -------------------- CONFIG --------------------
 st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
 
@@ -21,32 +20,42 @@ if not API_KEY:
     st.error("❌ Missing API key. Please set DEESEEK_API_KEY in Streamlit secrets.")
     st.stop()
 
-# ------------- HEADER & STYLING -------------
+# -------------------- HEADER --------------------
 st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/368px-Google_2015_logo.svg.png", width=100)
 st.title("📚 Curriculum Chatbot")
 
 st.markdown("""
-    <style>
-        .block-container {padding-top: 2rem;}
-        .stChatMessage.user {text-align: right;}
-        .stChatMessage.user .stMarkdown {
-            background-color: #DCF8C6; padding: 0.8rem 1rem;
-            border-radius: 10px; display: inline-block;
-            max-width: 80%;
-        }
-        .stChatMessage.assistant .stMarkdown {
-            background-color: #F1F0F0; padding: 0.8rem 1rem;
-            border-radius: 10px; display: inline-block;
-            max-width: 80%;
-        }
-    </style>
+<style>
+    .block-container {padding-top: 2rem;}
+    .stChatMessage.user {text-align: right;}
+    .stChatMessage.user .stMarkdown {
+        background-color: #DCF8C6; padding: 0.8rem 1rem;
+        border-radius: 10px; display: inline-block; max-width: 80%;
+    }
+    .stChatMessage.assistant .stMarkdown {
+        background-color: #F1F0F0; padding: 0.8rem 1rem;
+        border-radius: 10px; display: inline-block; max-width: 80%;
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# ------------- SESSION STATE -------------
+# -------------------- CACHE LOADER --------------------
+@st.cache_resource(show_spinner="📦 Loading FAISS index from Hugging Face...")
+def load_vectorstore():
+    HF_REPO_ID = "JK-TK/curriculum-faiss-index"
+    LOCAL_INDEX_DIR = "faiss_index_general"
+    os.makedirs(LOCAL_INDEX_DIR, exist_ok=True)
+
+    hf_hub_download(repo_id=HF_REPO_ID, filename="index.faiss", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
+    hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
+
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    return FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+
+# -------------------- INITIALIZE --------------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# ------------- LLM SETUP -------------
 if "qa_chain" not in st.session_state:
     with st.spinner("🧠 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
@@ -56,34 +65,17 @@ if "qa_chain" not in st.session_state:
             model="deepseek-chat",
             openai_api_key=API_KEY,
             openai_api_base="https://api.deepseek.com/v1",
-            temperature=0.3
+            temperature=0.3,
         )
 
-        SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-        # Load FAISS index from Hugging Face Hub
-        HF_REPO_ID = "JK-TK/curriculum-faiss-index"
-        LOCAL_INDEX_DIR = "faiss_index_general"
-        os.makedirs(LOCAL_INDEX_DIR, exist_ok=True)
-
-        faiss_file = hf_hub_download(repo_id="JK-TK/curriculum-faiss-index", filename="index.faiss", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
-        pkl_file = hf_hub_download(repo_id="JK-TK/curriculum-faiss-index", filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
-
-        vectorstore = FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
-        st.success("📦 Loaded FAISS index from Hugging Face Hub.")
-
+        vectorstore = load_vectorstore()
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-        chain = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=retriever,
-            memory=memory
-        )
+        chain = ConversationalRetrievalChain.from_llm(llm=llm, retriever=retriever, memory=memory)
         st.session_state.qa_chain = chain
 
-# ------------- CHAT DISPLAY -------------
+# -------------------- CHAT DISPLAY --------------------
 if "qa_chain" in st.session_state:
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
@@ -111,7 +103,7 @@ if "qa_chain" in st.session_state:
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    # Save Q&A
+                    # Save Q&A to CSV
                     if not os.path.exists("qa_log.csv"):
                         with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
                             csv.writer(f).writerow(["Question", "Answer"])
@@ -120,24 +112,25 @@ if "qa_chain" in st.session_state:
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-    # ------------- DOWNLOAD CHAT HISTORY -------------
-    if st.session_state.chat_history:
-        st.divider()
-        st.subheader("📥 Download Chat History")
-        csv_buffer = io.StringIO()
-        writer = csv.writer(csv_buffer)
-        writer.writerow(["Role", "Message"])
-        writer.writerows(st.session_state.chat_history)
-        csv_bytes = csv_buffer.getvalue().encode("utf-8")
+# -------------------- DOWNLOAD HISTORY --------------------
+if st.session_state.chat_history:
+    st.divider()
+    st.subheader("📥 Download Chat History")
 
-        txt_buffer = io.StringIO()
-        for role, msg in st.session_state.chat_history:
-            speaker = "You" if role == "user" else "Bot"
-            txt_buffer.write(f"{speaker}: {msg}\n{'-'*50}\n")
-        txt_bytes = txt_buffer.getvalue().encode("utf-8")
+    csv_buffer = io.StringIO()
+    writer = csv.writer(csv_buffer)
+    writer.writerow(["Role", "Message"])
+    writer.writerows(st.session_state.chat_history)
+    csv_bytes = csv_buffer.getvalue().encode("utf-8")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.download_button("⬇️ Download as CSV", csv_bytes, "chat_history.csv", "text/csv")
-        with col2:
-            st.download_button("⬇️ Download as TXT", txt_bytes, "chat_history.txt", "text/plain")
+    txt_buffer = io.StringIO()
+    for role, msg in st.session_state.chat_history:
+        speaker = "You" if role == "user" else "Bot"
+        txt_buffer.write(f"{speaker}: {msg}\n{'-'*50}\n")
+    txt_bytes = txt_buffer.getvalue().encode("utf-8")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button("⬇️ Download as CSV", csv_bytes, "chat_history.csv", "text/csv")
+    with col2:
+        st.download_button("⬇️ Download as TXT", txt_bytes, "chat_history.txt", "text/plain")
