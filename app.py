@@ -117,10 +117,10 @@ if st.session_state.qa_chain:
                 st.session_state.user_input = "What is chemistry?"
         with col3:
             if st.button("➕ Solve: 2x + 10 = 20", key="math"):
-                st.session_state.user_input = "Solve: 2x + 10 = 20"
+                st.session_state.user_input = "Solve: 4x + 10 = ?"
         st.markdown("</div>", unsafe_allow_html=True)
 
-    user_input = st.chat_input("💬 Ask a question about your curriculum")
+    user_input = st.chat_input("💬 Ask school notes, questions ...")
     if user_input:
         st.session_state.user_input = user_input
 
