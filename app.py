@@ -5,7 +5,10 @@ import tempfile
 import streamlit as st
 from tqdm import tqdm
 
-from langchain.document_loaders import PyMuPDFLoader, Docx2txtLoader, TextLoader, JSONLoader
+from sentence_transformers import SentenceTransformer  # Preloads model
+from langchain_community.document_loaders import (
+    PyMuPDFLoader, Docx2txtLoader, TextLoader, JSONLoader
+)
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -13,7 +16,7 @@ from langchain.chains import RetrievalQA
 from langchain_openai import ChatOpenAI
 import openai
 
-# ---------------- Streamlit UI ----------------
+# ---------------- Page Config ----------------
 st.set_page_config(page_title="📚 Curriculum QA Tool")
 st.title("📚 Curriculum QA with DeepSeek + LangChain")
 st.markdown("Upload your curriculum files and ask questions. Supports PDF, DOCX, TXT, and JSONL.")
@@ -22,12 +25,12 @@ st.markdown("Upload your curriculum files and ask questions. Supports PDF, DOCX,
 api_key = st.text_input("🔑 Enter your DeepSeek API Key", type="password")
 uploaded_files = st.file_uploader("📁 Upload your files", accept_multiple_files=True)
 
-# ---------------- Optional Reset Button ----------------
+# ---------------- Optional Reset ----------------
 if st.button("🔄 Reset App"):
     st.cache_data.clear()
     st.rerun()
 
-# ---------------- Run Processing ----------------
+# ---------------- Process ----------------
 if api_key and uploaded_files:
     with st.spinner("🔧 Initializing QA Tool..."):
         openai.api_base = "https://api.deepseek.com/v1"
@@ -73,11 +76,15 @@ if api_key and uploaded_files:
             st.error("❌ No documents were successfully loaded.")
             st.stop()
 
-        # Split and embed
+        # Split & embed
         splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         split_docs = splitter.split_documents(all_docs)
 
+        # Preload Hugging Face model
+        SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+        # Vector index
         vectorstore = FAISS.from_documents(split_docs, embedding_model)
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
