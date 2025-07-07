@@ -8,3 +8,5 @@ sentence-transformers
 pymupdf
 python-docx
 tqdm
+faiss-cpu
+docx2txt
