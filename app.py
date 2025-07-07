@@ -6,12 +6,14 @@ import streamlit as st
 from huggingface_hub import hf_hub_download
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
-# -------- CONFIG --------
+# ------------- CONFIG -------------
 st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
 
@@ -19,11 +21,10 @@ if not API_KEY:
     st.error("❌ Missing API key. Please set DEESEEK_API_KEY in Streamlit secrets.")
     st.stop()
 
-# -------- HEADER --------
+# ------------- HEADER & STYLING -------------
 st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/368px-Google_2015_logo.svg.png", width=100)
 st.title("📚 Curriculum Chatbot")
 
-# -------- STYLING --------
 st.markdown("""
     <style>
         .block-container {padding-top: 2rem;}
@@ -38,24 +39,26 @@ st.markdown("""
             border-radius: 10px; display: inline-block;
             max-width: 80%;
         }
-        #download-box {
+        .fixed-footer {
             position: fixed;
             bottom: 10px;
             right: 20px;
-            background-color: #f0f2f6;
-            padding: 0.5rem 1rem;
+            background: #f8f9fa;
+            padding: 6px 12px;
             border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            font-size: 0.85rem;
+            font-size: 0.8rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
     </style>
 """, unsafe_allow_html=True)
 
-# -------- SESSION STATE --------
+# ------------- SESSION STATE -------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "user_has_asked" not in st.session_state:
+    st.session_state.user_has_asked = False
 
-# -------- LLM & VECTORSTORE --------
+# ------------- LLM SETUP -------------
 if "qa_chain" not in st.session_state:
     with st.spinner("🧠 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
@@ -79,14 +82,27 @@ if "qa_chain" not in st.session_state:
         hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
 
         vectorstore = FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+        st.success("📦 Loaded FAISS index from Hugging Face Hub.")
+
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-        st.session_state.qa_chain = ConversationalRetrievalChain.from_llm(
-            llm=llm, retriever=retriever, memory=memory
-        )
+        # System prompt to enforce English
+        system_template = "You are a helpful educational assistant. Always respond in clear, fluent English."
+        chat_prompt = ChatPromptTemplate.from_messages([
+            SystemMessagePromptTemplate.from_template(system_template),
+            HumanMessagePromptTemplate.from_template("{question}")
+        ])
 
-# -------- CHAT DISPLAY --------
+        chain = ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=retriever,
+            memory=memory,
+            combine_docs_chain_kwargs={"prompt": chat_prompt}
+        )
+        st.session_state.qa_chain = chain
+
+# ------------- CHAT DISPLAY -------------
 if "qa_chain" in st.session_state:
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
@@ -95,6 +111,7 @@ if "qa_chain" in st.session_state:
     user_input = st.chat_input("💬 Ask a question about your curriculum")
 
     if user_input:
+        st.session_state.user_has_asked = True
         with st.chat_message("user"):
             st.markdown(user_input)
 
@@ -115,53 +132,31 @@ if "qa_chain" in st.session_state:
                     st.session_state.chat_history.append(("assistant", answer))
 
                     with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
-                        writer = csv.writer(f)
-                        if f.tell() == 0:
-                            writer.writerow(["Question", "Answer"])
-                        writer.writerow([user_input, answer])
+                        csv.writer(f).writerow([user_input, answer])
+
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-# -------- COMMON QUERIES --------
-st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-st.markdown("**💡 Common Queries:**")
-common_queries = [
-    "What is biology?",
-    "What is chemistry?",
-    "Solve 2x + 10 = 0"
-]
+    # --------- Common Queries (only show before any question is asked) ---------
+    if not st.session_state.user_has_asked:
+        st.markdown("**Try one of these:**")
+        cols = st.columns(3)
+        examples = ["What is biology?", "What is chemistry?", "2x + 10 = ?"]
+        for i, q in enumerate(examples):
+            if cols[i].button(q):
+                st.session_state.user_has_asked = True
+                st.session_state.chat_history.append(("user", q))
+                st.experimental_rerun()
 
-cols = st.columns(len(common_queries))
-for i, q in enumerate(common_queries):
-    if cols[i].button(q, key=f"suggestion_{i}"):
-        st.session_state.common_query = q
-        st.experimental_rerun()
+    # ------------- FOOTER DOWNLOAD BUTTON -------------
+    if st.session_state.chat_history:
+        with st.container():
+            txt_buffer = io.StringIO()
+            for role, msg in st.session_state.chat_history:
+                speaker = "You" if role == "user" else "Bot"
+                txt_buffer.write(f"{speaker}: {msg}\n{'-'*50}\n")
+            txt_bytes = txt_buffer.getvalue().encode("utf-8")
 
-# -------- HANDLE COMMON QUERY --------
-if "common_query" in st.session_state:
-    query = st.session_state.pop("common_query")
-    st.session_state.chat_history.append(("user", query))
-    result = st.session_state.qa_chain({"question": query})
-    answer = result["answer"].strip()
-    st.session_state.chat_history.append(("assistant", answer))
-    st.experimental_rerun()
-
-# -------- FLOATING DOWNLOAD BUTTON --------
-if st.session_state.chat_history:
-    txt_buffer = io.StringIO()
-    for role, msg in st.session_state.chat_history:
-        speaker = "You" if role == "user" else "Bot"
-        txt_buffer.write(f"{speaker}: {msg}\n{'-'*50}\n")
-    txt_bytes = txt_buffer.getvalue().encode("utf-8")
-
-    with st.container():
-        st.markdown("""
-            <div id="download-box">
-                📥 <b>Download Chat</b><br>
-        """, unsafe_allow_html=True)
-        st.download_button(
-            label="⬇ TXT", data=txt_bytes,
-            file_name="chat_history.txt", mime="text/plain",
-            key="download-txt", help="Download your chat as a text file"
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('<div class="fixed-footer">', unsafe_allow_html=True)
+            st.download_button("Download Chat as TXT", txt_bytes, "chat_history.txt", "text/plain", key="download-txt")
+            st.markdown('</div>', unsafe_allow_html=True)
