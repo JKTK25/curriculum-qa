@@ -1,10 +1,10 @@
 import os
 import csv
 import io
-import shutil
 import openai
 import streamlit as st
 from tqdm import tqdm
+from huggingface_hub import hf_hub_download
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -62,14 +62,16 @@ if "qa_chain" not in st.session_state:
         SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-        index_path = "faiss_index_general"  # Prebuilt FAISS index path
+        # Load FAISS index from Hugging Face Hub
+        HF_REPO_ID = "JK-TK/curriculum-faiss-index"
+        LOCAL_INDEX_DIR = "faiss_index_general"
+        os.makedirs(LOCAL_INDEX_DIR, exist_ok=True)
 
-        if os.path.exists(index_path):
-            vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
-            st.success("📦 Prebuilt FAISS index loaded.")
-        else:
-            st.error("❌ Prebuilt FAISS index not found. Please ensure 'faiss_index_general' exists.")
-            st.stop()
+        faiss_file = hf_hub_download(repo_id=JK-TK/curriculum-faiss-index, filename="index.faiss", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
+        pkl_file = hf_hub_download(repo_id=JK-TK/curriculum-faiss-index, filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
+
+        vectorstore = FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+        st.success("📦 Loaded FAISS index from Hugging Face Hub.")
 
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
