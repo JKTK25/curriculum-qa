@@ -97,7 +97,7 @@ if st.session_state.qa_chain is None:
 
         # Enforced English prompt
         chat_prompt = ChatPromptTemplate.from_template(
-            "You are a helpful curriculum assistant. Always respond in English.\n\nContext:\n{context}\n\nQuestion: {question}"
+            "English.\n\nContext:\n{context}\n\nQuestion: {question}"
         )
 
         chain = ConversationalRetrievalChain.from_llm(
