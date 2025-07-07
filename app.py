@@ -20,7 +20,8 @@ from firebase_admin import credentials, firestore
 
 #----- Streamlittream Handler -----
 
-class StreamlitCallbackHandler(BaseCallbackHandler): def init(self, container): self.container = container self.text = ""
+class StreamlitCallbackHandler(BaseCallbackHandler): 
+def init(self, container): self.container = container self.text = ""
 
 def on_llm_new_token(self, token: str, **kwargs) -> None:
     self.text += token
