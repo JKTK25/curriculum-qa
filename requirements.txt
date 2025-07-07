@@ -10,3 +10,4 @@ python-docx
 tqdm
 faiss-cpu
 docx2txt
+huggingface_hub
