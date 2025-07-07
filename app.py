@@ -49,26 +49,8 @@ st.title("📚 Curriculum Chatbot")
 
 # ------------- SIDEBAR -------------
 with st.sidebar:
-    st.subheader("⚙️ Configuration")
-    subject = st.selectbox("📚 Select Subject", ["General", "Chemistry", "Biology", "Physics", "Math"])
-    index_path = f"faiss_index_{subject.lower()}"
-
-    if not DEMO_MODE:
-        uploaded_files = st.file_uploader("📁 Upload curriculum files", accept_multiple_files=True)
-    else:
-        uploaded_files = []
-        st.info("🟢 Demo mode: Using prebuilt index.")
-
-    if st.button("🔄 Reset Chat"):
-        st.session_state.clear()
-        st.experimental_rerun()
-
-    if st.button("🗑 Clear Saved Index"):
-        if os.path.exists(index_path):
-            shutil.rmtree(index_path)
-            st.success("✅ FAISS index cleared.")
-            st.session_state.clear()
-            st.experimental_rerun()
+    st.subheader("ℹ️ Info")
+    st.info("🟢 Using prebuilt general FAISS index.")
 
 # ------------- SESSION STATE -------------
 if "chat_history" not in st.session_state:
@@ -89,45 +71,13 @@ if "qa_chain" not in st.session_state:
         SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-        # Load or build index
+        # Use prebuilt general FAISS index
+        index_path = os.path.join("faiss_indexes", "faiss_index_general")
         if os.path.exists(index_path):
             vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
-            st.success(f"📦 Loaded index for {subject}")
-        elif uploaded_files:
-            temp_dir = tempfile.mkdtemp()
-            all_docs = []
-            for file in uploaded_files:
-                path = os.path.join(temp_dir, file.name)
-                with open(path, "wb") as f:
-                    f.write(file.getbuffer())
-
-                ext = os.path.splitext(path)[1].lower()
-                try:
-                    if ext == ".pdf":
-                        loader = PyMuPDFLoader(path)
-                    elif ext == ".docx":
-                        loader = Docx2txtLoader(path)
-                    elif ext == ".txt":
-                        loader = TextLoader(path)
-                    elif ext == ".jsonl":
-                        loader = JSONLoader(path, text_key="text")
-                    else:
-                        continue
-                    docs = loader.load()
-                    all_docs.extend(docs)
-                except Exception as e:
-                    st.warning(f"⚠️ Could not load {file.name}: {e}")
-
-            if not all_docs:
-                st.error("❌ No documents loaded.")
-                st.stop()
-
-            chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50).split_documents(all_docs)
-            vectorstore = FAISS.from_documents(chunks, embeddings)
-            vectorstore.save_local(index_path)
-            st.success(f"✅ Index built and saved for {subject}")
+            st.success("📦 Loaded general FAISS index.")
         else:
-            st.info("📁 Please upload files or use a prebuilt index.")
+            st.error("❌ General FAISS index not found. Please ensure it's in faiss_indexes/faiss_index_general/")
             st.stop()
 
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
