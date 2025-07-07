@@ -67,7 +67,7 @@ if "qa_chain" not in st.session_state:
 
 # ------------- LLM SETUP -------------
 if st.session_state.qa_chain is None:
-    with st.spinner("🧠 Initializing chatbot..."):
+    with st.spinner("🧐 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
         openai.api_key = API_KEY
 
@@ -81,7 +81,6 @@ if st.session_state.qa_chain is None:
         SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-        # Load FAISS index from Hugging Face Hub
         HF_REPO_ID = "JK-TK/curriculum-faiss-index"
         LOCAL_INDEX_DIR = "faiss_index_general"
         os.makedirs(LOCAL_INDEX_DIR, exist_ok=True)
@@ -95,7 +94,6 @@ if st.session_state.qa_chain is None:
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-        # Enforced English prompt
         chat_prompt = ChatPromptTemplate.from_template(
             "English.\n\nContext:\n{context}\n\nQuestion: {question}"
         )
@@ -114,26 +112,24 @@ if st.session_state.qa_chain:
         with st.chat_message(role):
             st.markdown(msg)
 
-    # Only show quick queries if user hasn't asked anything yet
-    if not st.session_state.chat_history:
-        st.markdown("<div class='quick-queries'>", unsafe_allow_html=True)
-        st.markdown("### 💡 Try a common question:")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if st.button("What is biology?"):
-                st.session_state.user_input = "What is biology?"
-        with col2:
-            if st.button("What is chemistry?"):
-                st.session_state.user_input = "What is chemistry?"
-        with col3:
-            if st.button("Solve: 2x + 10 = 20"):
-                st.session_state.user_input = "Solve: 2x + 10 = 20"
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # Chat input
     user_input = st.chat_input("💬 Ask a question about your curriculum")
     if user_input:
         st.session_state.user_input = user_input
+
+    st.markdown("<div class='quick-queries'>", unsafe_allow_html=True)
+    st.markdown("### 🔎 Try a quick question:")
+    with st.container():
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("🧬 What is biology?", key="bio"):
+                st.session_state.user_input = "What is biology?"
+        with col2:
+            if st.button("⚗️ What is chemistry?", key="chem"):
+                st.session_state.user_input = "What is chemistry?"
+        with col3:
+            if st.button("➕ Solve: 2x + 10 = 20", key="math"):
+                st.session_state.user_input = "Solve: 2x + 10 = 20"
+    st.markdown("</div>", unsafe_allow_html=True)
 
     if "user_input" in st.session_state:
         query = st.session_state.pop("user_input")
@@ -156,7 +152,6 @@ if st.session_state.qa_chain:
                     st.session_state.chat_history.append(("user", query))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    # Save to log
                     with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
                         writer = csv.writer(f)
                         if f.tell() == 0:
