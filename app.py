@@ -13,7 +13,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from langchain_core.chat_history import ChatMessageHistory
+from langchain_core.memory import ChatMessageHistory  # ✅ Fixed import
 from langchain_openai import ChatOpenAI
 import openai
 
@@ -23,8 +23,16 @@ st.markdown("""
     <style>
         .block-container {padding-top: 2rem;}
         .stChatMessage.user {text-align: right;}
-        .stChatMessage.user .stMarkdown {background-color: #DCF8C6; padding: 0.8rem 1rem; border-radius: 10px; display: inline-block; max-width: 80%;}
-        .stChatMessage.assistant .stMarkdown {background-color: #F1F0F0; padding: 0.8rem 1rem; border-radius: 10px; display: inline-block; max-width: 80%;}
+        .stChatMessage.user .stMarkdown {
+            background-color: #DCF8C6; padding: 0.8rem 1rem;
+            border-radius: 10px; display: inline-block;
+            max-width: 80%;
+        }
+        .stChatMessage.assistant .stMarkdown {
+            background-color: #F1F0F0; padding: 0.8rem 1rem;
+            border-radius: 10px; display: inline-block;
+            max-width: 80%;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -93,7 +101,7 @@ if api_key and uploaded_files:
 
             retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
-            # ✅ Updated Memory API (no warning)
+            # ✅ Updated LangChain 0.2+ memory
             memory = ConversationBufferMemory(
                 memory_key="chat_history",
                 return_messages=True,
