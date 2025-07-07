@@ -38,11 +38,16 @@ st.markdown("""
 
 st.title("📚 Curriculum Chatbot")
 
+# ----------- SECURE API LOAD -----------
+api_key = os.getenv("DEESEEK_API_KEY")
+if not api_key:
+    st.error("❌ API key not found. Please set DEESEEK_API_KEY in Streamlit secrets.")
+    st.stop()
+
 # ----------- SIDEBAR -----------
 with st.sidebar:
-    st.subheader("🔐 API & Upload")
-    api_key = st.text_input("DeepSeek API Key", type="password")
-    uploaded_files = st.file_uploader("📁 Upload curriculum files", accept_multiple_files=True)
+    st.subheader("📁 Upload Curriculum Files")
+    uploaded_files = st.file_uploader("Upload PDF, DOCX, TXT, or JSONL files", accept_multiple_files=True)
     if st.button("🔄 Reset Chat"):
         st.session_state.clear()
         st.experimental_rerun()
@@ -52,7 +57,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # ----------- SETUP LLM & CHAIN -----------
-if api_key and uploaded_files:
+if uploaded_files:
     if "qa_chain" not in st.session_state:
         with st.spinner("🧠 Initializing chatbot..."):
             openai.api_base = "https://api.deepseek.com/v1"
@@ -113,13 +118,12 @@ if api_key and uploaded_files:
 
             st.session_state.qa_chain = chain
 
-# ----------- DISPLAY CHAT HISTORY (top to bottom) -----------
+# ----------- CHAT INTERFACE -----------
 if "qa_chain" in st.session_state:
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
             st.markdown(msg)
 
-    # ----------- INPUT AND RESPONSE -----------
     user_input = st.chat_input("💬 Ask a question about your curriculum")
 
     if user_input:
@@ -132,25 +136,20 @@ if "qa_chain" in st.session_state:
                     result = st.session_state.qa_chain({"question": user_input})
                     answer = result["answer"]
 
-                    # 🔍 Clean repetitive phrases
-                    unwanted_phrases = [
-                        "from the provided context",
-                        "based on the context provided",
-                        "according to the information provided",
-                        "according to the information given",
-                        "from what I can gather",
-                        "based on the documents"
-                    ]
-                    for phrase in unwanted_phrases:
+                    # Remove unwanted boilerplate phrases
+                    for phrase in [
+                        "from the provided context", "based on the context provided",
+                        "according to the information provided", "from what I can gather"
+                    ]:
                         answer = answer.replace(phrase, "").strip()
 
                     st.markdown(answer)
 
-                    # Save to memory
+                    # Save history
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    # Save to CSV log
+                    # Log to CSV
                     if not os.path.exists("qa_log.csv"):
                         with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
                             csv.writer(f).writerow(["Question", "Answer"])
@@ -182,5 +181,6 @@ if "qa_chain" in st.session_state:
             st.download_button("⬇️ Download as CSV", data=csv_bytes, file_name="chat_history.csv", mime="text/csv")
         with col2:
             st.download_button("⬇️ Download as Text", data=text_bytes, file_name="chat_history.txt", mime="text/plain")
+
 else:
-    st.info("⬅️ Please enter your API key and upload files to begin.")
+    st.info("⬅️ Upload curriculum files to begin.")
