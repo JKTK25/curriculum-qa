@@ -13,7 +13,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from langchain_core.memory import ChatMessageHistory  # ✅ Fixed import
 from langchain_openai import ChatOpenAI
 import openai
 
@@ -101,11 +100,10 @@ if api_key and uploaded_files:
 
             retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
-            # ✅ Updated LangChain 0.2+ memory
+            # ✅ Classic memory setup (no ChatMessageHistory)
             memory = ConversationBufferMemory(
                 memory_key="chat_history",
-                return_messages=True,
-                chat_memory=ChatMessageHistory()
+                return_messages=True
             )
 
             chain = ConversationalRetrievalChain.from_llm(
