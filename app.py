@@ -1,16 +1,11 @@
 import os
 import csv
-import tempfile
-import streamlit as st
-from tqdm import tqdm
 import io
 import shutil
 import openai
-
+import streamlit as st
+from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
-from langchain_community.document_loaders import (
-    PyMuPDFLoader, Docx2txtLoader, TextLoader, JSONLoader
-)
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -18,16 +13,18 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 
-# ---------- CONFIG ----------
-st.set_page_config(page_title="📚 School AI", layout="centered")
-DEMO_MODE = st.secrets.get("DEMO_MODE", False)
+# ------------- CONFIG -------------
+st.set_page_config(page_title="📚 Curriculum Chatbot", layout="centered")
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
 
 if not API_KEY:
     st.error("❌ Missing API key. Please set DEESEEK_API_KEY in Streamlit secrets.")
     st.stop()
 
-# ---------- CUSTOM STYLING ----------
+# ------------- HEADER & STYLING -------------
+st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/368px-Google_2015_logo.svg.png", width=100)
+st.title("📚 Curriculum Chatbot")
+
 st.markdown("""
     <style>
         .block-container {padding-top: 2rem;}
@@ -42,29 +39,19 @@ st.markdown("""
             border-radius: 10px; display: inline-block;
             max-width: 80%;
         }
-        footer {visibility: hidden;}
-        .footer {
-            position: fixed; bottom: 10px; left: 0; right: 0;
-            text-align: center; color: #888; font-size: 0.8rem;
-        }
-        [data-testid="stSidebar"] {display: none;}
     </style>
-    <div class="footer">Built with ❤️ by [James Kariuki] | Contact: jamexkarix583@gmail.com </div>
 """, unsafe_allow_html=True)
 
-# ---------- BRANDING ----------
-st.image("st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/368px-Google_2015_logo.svg.png", width=100)", width=80)
-st.title("📚 school AI")
-
-# ---------- SESSION STATE ----------
+# ------------- SESSION STATE -------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# ---------- LLM SETUP ----------
+# ------------- LLM SETUP -------------
 if "qa_chain" not in st.session_state:
     with st.spinner("🧠 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
         openai.api_key = API_KEY
+
         llm = ChatOpenAI(
             model="deepseek-chat",
             openai_api_key=API_KEY,
@@ -75,13 +62,13 @@ if "qa_chain" not in st.session_state:
         SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
-        # Load prebuilt FAISS index
-        index_path = os.path.join("faiss_indexes", "faiss_index_general")
+        index_path = "faiss_index_general"  # Prebuilt FAISS index path
+
         if os.path.exists(index_path):
             vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
-            st.success("📦 Loaded general FAISS index.")
+            st.success("📦 Prebuilt FAISS index loaded.")
         else:
-            st.error("❌ General FAISS index not found.")
+            st.error("❌ Prebuilt FAISS index not found. Please ensure 'faiss_index_general' exists.")
             st.stop()
 
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
@@ -94,7 +81,7 @@ if "qa_chain" not in st.session_state:
         )
         st.session_state.qa_chain = chain
 
-# ---------- CHAT DISPLAY ----------
+# ------------- CHAT DISPLAY -------------
 if "qa_chain" in st.session_state:
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
@@ -119,10 +106,10 @@ if "qa_chain" in st.session_state:
                         answer = answer.replace(phrase, "").strip()
 
                     st.markdown(answer)
-
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", answer))
 
+                    # Save Q&A
                     if not os.path.exists("qa_log.csv"):
                         with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
                             csv.writer(f).writerow(["Question", "Answer"])
@@ -131,7 +118,7 @@ if "qa_chain" in st.session_state:
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-    # ---------- DOWNLOAD CHAT HISTORY ----------
+    # ------------- DOWNLOAD CHAT HISTORY -------------
     if st.session_state.chat_history:
         st.divider()
         st.subheader("📥 Download Chat History")
