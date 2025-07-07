@@ -5,7 +5,6 @@ import openai
 import uuid
 import streamlit as st
 from huggingface_hub import hf_hub_download
-from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -36,7 +35,6 @@ if "firebase_app" not in st.session_state:
 
     st.session_state.firebase_app = True
 
-
 db = firestore.client()
 
 if "user_id" not in st.session_state:
@@ -48,6 +46,50 @@ def log_chat(user_id, question, answer):
         "answer": answer,
         "timestamp": firestore.SERVER_TIMESTAMP
     })
+
+# ------------- CACHED RESOURCES -------------
+@st.cache_resource
+def load_embeddings():
+    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+@st.cache_resource
+def load_vectorstore(local_dir="faiss_index_general"):
+    HF_REPO_ID = "JK-TK/curriculum-faiss-index"
+    os.makedirs(local_dir, exist_ok=True)
+
+    if not os.path.exists(os.path.join(local_dir, "index.faiss")) or not os.path.exists(os.path.join(local_dir, "index.pkl")):
+        hf_hub_download(repo_id=HF_REPO_ID, filename="index.faiss", repo_type="dataset", local_dir=local_dir)
+        hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=local_dir)
+
+    return FAISS.load_local(local_dir, load_embeddings(), allow_dangerous_deserialization=True)
+
+@st.cache_resource
+def load_llm():
+    openai.api_base = "https://api.deepseek.com/v1"
+    openai.api_key = API_KEY
+    return ChatOpenAI(
+        model="deepseek-chat",
+        openai_api_key=API_KEY,
+        openai_api_base="https://api.deepseek.com/v1",
+        temperature=0.3
+    )
+
+@st.cache_resource
+def load_memory():
+    return ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+@st.cache_resource
+def load_qa_chain():
+    retriever = load_vectorstore().as_retriever(search_kwargs={"k": 5})
+    prompt = ChatPromptTemplate.from_template(
+        "English.\n\nContext:\n{context}\n\nQuestion: {question}"
+    )
+    return ConversationalRetrievalChain.from_llm(
+        llm=load_llm(),
+        retriever=retriever,
+        memory=load_memory(),
+        combine_docs_chain_kwargs={"prompt": prompt}
+    )
 
 # ------------- HEADER & STYLING -------------
 st.image("https://static.mycareersfuture.gov.sg/images/company/logos/b9b623bfe890ac230ac57629e84742ba/lark-technologies.png", width=100)
@@ -89,49 +131,11 @@ st.markdown("""
 # ------------- SESSION STATE -------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
 if "qa_chain" not in st.session_state:
-    st.session_state.qa_chain = None
-
-# ------------- LLM SETUP -------------
-if st.session_state.qa_chain is None:
-    with st.spinner("🤔 Initializing chatbot..."):
-        openai.api_base = "https://api.deepseek.com/v1"
-        openai.api_key = API_KEY
-
-        llm = ChatOpenAI(
-            model="deepseek-chat",
-            openai_api_key=API_KEY,
-            openai_api_base="https://api.deepseek.com/v1",
-            temperature=0.3
-        )
-
-        SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-        HF_REPO_ID = "JK-TK/curriculum-faiss-index"
-        LOCAL_INDEX_DIR = "faiss_index_general"
-        os.makedirs(LOCAL_INDEX_DIR, exist_ok=True)
-
-        hf_hub_download(repo_id=HF_REPO_ID, filename="index.faiss", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
-        hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
-
-        vectorstore = FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
-        st.success("📦 Loaded FAISS index from Hugging Face Hub.")
-
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-        chat_prompt = ChatPromptTemplate.from_template(
-            "English.\n\nContext:\n{context}\n\nQuestion: {question}"
-        )
-
-        chain = ConversationalRetrievalChain.from_llm(
-            llm=llm,
-            retriever=retriever,
-            memory=memory,
-            combine_docs_chain_kwargs={"prompt": chat_prompt}
-        )
-        st.session_state.qa_chain = chain
+    with st.spinner("🤖 Initializing chatbot..."):
+        st.session_state.qa_chain = load_qa_chain()
+        st.success("✅ Chatbot is ready!")
 
 # ------------- CHAT DISPLAY -------------
 if st.session_state.qa_chain:
