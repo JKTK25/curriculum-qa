@@ -38,7 +38,7 @@ st.markdown("""
 
 st.title("📚 Curriculum Chatbot")
 
-# ----------- SECURE API LOAD -----------
+# ----------- LOAD API KEY SECURELY -----------
 api_key = os.getenv("DEESEEK_API_KEY")
 if not api_key:
     st.error("❌ API key not found. Please set DEESEEK_API_KEY in Streamlit secrets.")
@@ -136,7 +136,7 @@ if "qa_chain" in st.session_state:
                     result = st.session_state.qa_chain({"question": user_input})
                     answer = result["answer"]
 
-                    # Remove unwanted boilerplate phrases
+                    # Remove boilerplate phrases
                     for phrase in [
                         "from the provided context", "based on the context provided",
                         "according to the information provided", "from what I can gather"
@@ -149,7 +149,7 @@ if "qa_chain" in st.session_state:
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    # Log to CSV
+                    # Save to CSV log
                     if not os.path.exists("qa_log.csv"):
                         with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
                             csv.writer(f).writerow(["Question", "Answer"])
@@ -159,7 +159,7 @@ if "qa_chain" in st.session_state:
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-    # ----------- DOWNLOAD CHAT -----------
+    # ----------- DOWNLOAD CHAT LOG -----------
     if st.session_state.chat_history:
         csv_buffer = io.StringIO()
         csv_writer = csv.writer(csv_buffer)
@@ -181,6 +181,3 @@ if "qa_chain" in st.session_state:
             st.download_button("⬇️ Download as CSV", data=csv_bytes, file_name="chat_history.csv", mime="text/csv")
         with col2:
             st.download_button("⬇️ Download as Text", data=text_bytes, file_name="chat_history.txt", mime="text/plain")
-
-else:
-    st.info("⬅️ Upload curriculum files to begin.")
