@@ -117,7 +117,7 @@ if st.session_state.qa_chain:
         st.session_state.user_input = user_input
 
     st.markdown("<div class='quick-queries'>", unsafe_allow_html=True)
-    st.markdown("### 🔎 Try a quick question:")
+    st.markdown("### 🔎 Quick quries:")
     with st.container():
         col1, col2, col3 = st.columns(3)
         with col1:
