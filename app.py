@@ -1,38 +1,54 @@
 import os
 import csv
-import shutil
 import tempfile
 import streamlit as st
 from tqdm import tqdm
 
-from sentence_transformers import SentenceTransformer  # Preloads model
+from sentence_transformers import SentenceTransformer
 from langchain_community.document_loaders import (
     PyMuPDFLoader, Docx2txtLoader, TextLoader, JSONLoader
 )
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.chains import RetrievalQA
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 import openai
 
-# ---------------- Page Config ----------------
-st.set_page_config(page_title="📚 Curriculum QA Tool")
-st.title("📚 Curriculum QA with DeepSeek + LangChain")
-st.markdown("Upload your curriculum files and ask questions. Supports PDF, DOCX, TXT, and JSONL.")
+# ---------------- App Config ----------------
+st.set_page_config(page_title="📚 Curriculum Chatbot", layout="wide")
+st.title("📚 Curriculum Chatbot with Memory")
+st.markdown("Upload your curriculum files and ask questions — now with chat-style memory!")
 
-# ---------------- Input API Key ----------------
-api_key = st.text_input("🔑 Enter your DeepSeek API Key", type="password")
-uploaded_files = st.file_uploader("📁 Upload your files", accept_multiple_files=True)
+# ---------------- Optional Password Gate ----------------
+REQUIRE_PASSWORD = False  # Set to True to enable password gate
+APP_PASSWORD = "letmein"  # You can change this password
 
-# ---------------- Optional Reset ----------------
-if st.button("🔄 Reset App"):
-    st.cache_data.clear()
-    st.rerun()
+if REQUIRE_PASSWORD:
+    pw = st.text_input("🔒 Enter App Password", type="password")
+    if pw != APP_PASSWORD:
+        st.stop()
 
-# ---------------- Process ----------------
+# ---------------- Sidebar ----------------
+with st.sidebar:
+    st.subheader("🔐 DeepSeek API Key")
+    api_key = st.text_input("Paste your key here", type="password")
+
+    uploaded_files = st.file_uploader("📁 Upload curriculum files", accept_multiple_files=True)
+    if st.button("🔄 Reset Conversation"):
+        st.session_state.clear()
+        st.experimental_rerun()
+
+# ---------------- Session State ----------------
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# ---------------- Start Processing ----------------
 if api_key and uploaded_files:
-    with st.spinner("🔧 Initializing QA Tool..."):
+    with st.spinner("🧠 Setting up chatbot..."):
+
+        # Set DeepSeek via OpenAI-style API
         openai.api_base = "https://api.deepseek.com/v1"
         openai.api_key = api_key
         llm = ChatOpenAI(
@@ -42,7 +58,7 @@ if api_key and uploaded_files:
             temperature=0.3
         )
 
-        # Save files to temp dir
+        # Save uploaded files to temp dir
         temp_dir = tempfile.mkdtemp()
         all_files = []
         for file in uploaded_files:
@@ -76,37 +92,55 @@ if api_key and uploaded_files:
             st.error("❌ No documents were successfully loaded.")
             st.stop()
 
-        # Split & embed
+        # Split and embed
         splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         split_docs = splitter.split_documents(all_docs)
 
-        # Preload Hugging Face model
         SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
         embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-        # Vector index
         vectorstore = FAISS.from_documents(split_docs, embedding_model)
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-        qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
 
-    st.success("✅ Curriculum QA initialized. Ask your questions below!")
+        # Memory + Retrieval Chain
+        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        qa_chain = ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=retriever,
+            memory=memory,
+            return_source_documents=False
+        )
 
-    # ---------------- Q&A Section ----------------
-    question = st.text_input("💬 Ask a question about your curriculum")
-    if question:
-        try:
-            with st.spinner("Thinking..."):
-                answer = qa_chain.run(question)
-            st.markdown(f"**💡 Answer:** {answer}")
+        st.session_state.qa_chain = qa_chain
 
-            # Save to CSV
-            if not os.path.exists("qa_log.csv"):
-                with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
-                    csv.writer(f).writerow(["Question", "Answer"])
-            with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
-                csv.writer(f).writerow([question, answer])
+    st.success("✅ Chatbot is ready! Ask your curriculum questions below.")
 
-        except Exception as e:
-            st.error(f"⚠️ Error: {e}")
+# ---------------- Chat UI ----------------
+if "qa_chain" in st.session_state:
+    user_input = st.chat_input("💬 Ask something about your curriculum")
+    if user_input:
+        with st.spinner("💡 Thinking..."):
+            try:
+                result = st.session_state.qa_chain({"question": user_input})
+                answer = result["answer"]
+
+                st.session_state.chat_history.append(("user", user_input))
+                st.session_state.chat_history.append(("bot", answer))
+
+                # Save to CSV
+                if not os.path.exists("qa_log.csv"):
+                    with open("qa_log.csv", "w", newline='', encoding="utf-8") as f:
+                        csv.writer(f).writerow(["Question", "Answer"])
+                with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
+                    csv.writer(f).writerow([user_input, answer])
+
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+
+    # Show full conversation
+    for role, text in st.session_state.chat_history:
+        if role == "user":
+            st.chat_message("user").markdown(text)
+        else:
+            st.chat_message("assistant").markdown(text)
 else:
-    st.info("🔐 Please provide your DeepSeek API key and upload at least one document.")
+    st.info("⬅️ Enter your API key and upload documents to begin.")
