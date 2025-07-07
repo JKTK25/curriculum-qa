@@ -42,20 +42,32 @@ st.image("https://static.mycareersfuture.gov.sg/images/company/logos/b9b623bfe89
 st.markdown("""
 
 <style>
-    .block-container {padding-top: 2rem;}
-    .stChatMessage.user {text-align: right;}
+    .block-container { padding-top: 2rem; }
+    .stChatMessage.user {
+        text-align: right;
+    }
     .stChatMessage.user .stMarkdown {
-        background-color: #DCF8C6; padding: 0.8rem 1rem;
-        border-radius: 10px; display: inline-block; max-width: 80%;
+        background-color: #DCF8C6;
+        padding: 0.8rem 1rem;
+        border-radius: 10px;
+        display: inline-block;
+        max-width: 80%;
     }
     .stChatMessage.assistant .stMarkdown {
-        background-color: #F1F0F0; padding: 0.8rem 1rem;
-        border-radius: 10px; display: inline-block; max-width: 80%;
+        background-color: #F1F0F0;
+        padding: 0.8rem 1rem;
+        border-radius: 10px;
+        display: inline-block;
+        max-width: 80%;
     }
     .download-footer {
-        position: fixed; bottom: 10px; right: 10px;
-        background-color: #f0f2f6; padding: 10px;
-        border-radius: 8px; font-size: 12px;
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        background-color: #f0f2f6;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 12px;
     }
 </style>""", unsafe_allow_html=True)
 
@@ -98,4 +110,3 @@ if st.session_state.chat_history: txt_buffer = io.StringIO() for role, msg in st
 st.markdown("<div class='download-footer'>", unsafe_allow_html=True)
 st.download_button("⬇️ Download Chat (TXT)", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
 st.markdown("</div>", unsafe_allow_html=True)
-
