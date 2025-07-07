@@ -4,8 +4,6 @@ import io
 import uuid
 import openai
 import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, firestore
 from huggingface_hub import hf_hub_download
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -14,8 +12,10 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
+import firebase_admin
+from firebase_admin import credentials, firestore
 
-# ------------- CONFIG -------------
+# ---------------- CONFIG ----------------
 st.set_page_config(page_title="📚 School AI", layout="centered")
 API_KEY = os.getenv("DEESEEK_API_KEY") or st.secrets.get("DEESEEK_API_KEY")
 
@@ -23,16 +23,16 @@ if not API_KEY:
     st.error("❌ Missing API key. Please set DEESEEK_API_KEY in Streamlit secrets.")
     st.stop()
 
-# ------------- FIREBASE INIT -------------
+# ---------------- FIREBASE ----------------
 if "firebase_app" not in st.session_state:
     if "FIREBASE" in st.secrets:
         cred = credentials.Certificate(dict(st.secrets["FIREBASE"]))
     else:
-        cred = credentials.Certificate("firebase_key.json")  # Local fallback
+        cred = credentials.Certificate("firebase_key.json")
     try:
         firebase_admin.initialize_app(cred)
     except ValueError:
-        pass  # Already initialized
+        pass  # already initialized
     st.session_state.firebase_app = True
 
 db = firestore.client()
@@ -48,7 +48,7 @@ def log_chat(user_id, question, answer):
         "timestamp": firestore.SERVER_TIMESTAMP
     })
 
-# ------------- HEADER & STYLING -------------
+# ---------------- UI HEADER ----------------
 st.image("https://static.mycareersfuture.gov.sg/images/company/logos/b9b623bfe890ac230ac57629e84742ba/lark-technologies.png", width=100)
 st.title("📚 School AI")
 
@@ -68,13 +68,12 @@ st.markdown("""
         }
         .download-footer {
             position: fixed;
-            bottom: 5px;
-            right: 5px;
+            bottom: 10px;
+            right: 10px;
             background-color: #f0f2f6;
-            padding: 6px;
-            border-radius: 6px;
-            font-size: 11px;
-            box-shadow: 0px 0px 4px rgba(0,0,0,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 12px;
         }
         .quick-queries {
             margin-top: 2rem;
@@ -86,15 +85,15 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ------------- SESSION STATE -------------
+# ---------------- SESSION STATE ----------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "qa_chain" not in st.session_state:
     st.session_state.qa_chain = None
 
-# ------------- LLM SETUP -------------
+# ---------------- LLM SETUP ----------------
 if st.session_state.qa_chain is None:
-    with st.spinner("🧠 Initializing chatbot..."):
+    with st.spinner("🧐 Initializing chatbot..."):
         openai.api_base = "https://api.deepseek.com/v1"
         openai.api_key = API_KEY
 
@@ -105,7 +104,10 @@ if st.session_state.qa_chain is None:
             temperature=0.3
         )
 
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"}  # ✅ Force CPU for Streamlit
+        )
 
         HF_REPO_ID = "JK-TK/curriculum-faiss-index"
         LOCAL_INDEX_DIR = "faiss_index_general"
@@ -115,7 +117,7 @@ if st.session_state.qa_chain is None:
         hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=LOCAL_INDEX_DIR)
 
         vectorstore = FAISS.load_local(LOCAL_INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
-        st.success("📦 Loaded FAISS index from Hugging Face Hub.")
+        st.success("📦 FAISS index loaded from Hugging Face Hub.")
 
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -132,7 +134,7 @@ if st.session_state.qa_chain is None:
         )
         st.session_state.qa_chain = chain
 
-# ------------- CHAT DISPLAY -------------
+# ---------------- CHAT DISPLAY ----------------
 if st.session_state.qa_chain:
     for role, msg in st.session_state.chat_history:
         with st.chat_message(role):
@@ -178,17 +180,20 @@ if st.session_state.qa_chain:
                     st.session_state.chat_history.append(("user", query))
                     st.session_state.chat_history.append(("assistant", answer))
 
-                    log_chat(st.session_state.user_id, query, answer)
-
+                    # Save to CSV
                     with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
                         writer = csv.writer(f)
                         if f.tell() == 0:
                             writer.writerow(["Question", "Answer"])
                         writer.writerow([query, answer])
+
+                    # Save to Firestore
+                    log_chat(st.session_state.user_id, query, answer)
+
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
-# ------------- DOWNLOAD CHAT HISTORY -------------
+# ---------------- DOWNLOAD CHAT HISTORY ----------------
 if st.session_state.chat_history:
     txt_buffer = io.StringIO()
     for role, msg in st.session_state.chat_history:
@@ -197,5 +202,5 @@ if st.session_state.chat_history:
     txt_bytes = txt_buffer.getvalue().encode("utf-8")
 
     st.markdown("<div class='download-footer'>", unsafe_allow_html=True)
-    st.download_button("⬇️ Chat (TXT)", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
+    st.download_button("⬇️ Download Chat (TXT)", txt_bytes, "chat_history.txt", "text/plain", key="download_txt")
     st.markdown("</div>", unsafe_allow_html=True)
