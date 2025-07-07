@@ -1,14 +1,14 @@
 import os
 import csv
 import io
-import uuid
 import openai
+import uuid
 import streamlit as st
+from tqdm import tqdm
 from huggingface_hub import hf_hub_download
-from sentence_transformers import SentenceTransformer
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import SentenceTransformerEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
@@ -27,16 +27,17 @@ if not API_KEY:
 # ------------- FIREBASE INIT -------------
 if "firebase_app" not in st.session_state:
     try:
-        firebase_admin.get_app("school_ai")
-    except ValueError:
         if "FIREBASE" in st.secrets:
             cred = credentials.Certificate(dict(st.secrets["FIREBASE"]))
         else:
-            cred = credentials.Certificate("firebase_key.json")
+            cred = credentials.Certificate("firebase_key.json")  # Fallback
         firebase_admin.initialize_app(cred, name="school_ai")
-    st.session_state.firebase_app = True
+        st.session_state.firebase_app = True
+    except ValueError:
+        # Firebase already initialized
+        pass
 
-db = firestore.client(firebase_admin.get_app("school_ai"))
+db = firestore.client()
 
 if "user_id" not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
@@ -76,13 +77,8 @@ st.markdown("""
             border-radius: 8px;
             font-size: 12px;
         }
-        .quick-queries {
-            margin-top: 2rem;
-        }
-        .stButton>button {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.8rem;
-        }
+        .quick-queries {margin-top: 2rem;}
+        .stButton>button {padding: 0.25rem 0.5rem; font-size: 0.8rem;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -105,9 +101,8 @@ if st.session_state.qa_chain is None:
             temperature=0.3
         )
 
-        # ✅ CPU-safe embedding model (no torch.to() crash)
-        model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        embeddings = SentenceTransformerEmbeddings(client=model)
+        os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
         HF_REPO_ID = "JK-TK/curriculum-faiss-index"
         LOCAL_INDEX_DIR = "faiss_index_general"
@@ -122,9 +117,7 @@ if st.session_state.qa_chain is None:
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-        chat_prompt = ChatPromptTemplate.from_template(
-            "English.\n\nContext:\n{context}\n\nQuestion: {question}"
-        )
+        chat_prompt = ChatPromptTemplate.from_template("English.\n\nContext:\n{context}\n\nQuestion: {question}")
 
         chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
@@ -169,11 +162,7 @@ if st.session_state.qa_chain:
                 try:
                     result = st.session_state.qa_chain({"question": query})
                     answer = result["answer"]
-
-                    for phrase in [
-                        "from the provided context", "based on the context provided",
-                        "according to the information provided", "from what I can gather"
-                    ]:
+                    for phrase in ["from the provided context", "based on the context provided", "according to the information provided", "from what I can gather"]:
                         answer = answer.replace(phrase, "").strip()
 
                     st.markdown(answer)
@@ -187,7 +176,6 @@ if st.session_state.qa_chain:
                         writer.writerow([query, answer])
 
                     log_chat(st.session_state.user_id, query, answer)
-
                 except Exception as e:
                     st.error(f"⚠️ Error: {e}")
 
