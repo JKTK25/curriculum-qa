@@ -3,8 +3,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
-from langchain.chains.retrieval import create_retrieval_chain
 from langchain_community.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pypdf import PdfReader
 import docx
@@ -84,9 +85,16 @@ if uploaded_files:
         ("human", "{input}"),
     ])
     
-    # Create the document chain and retrieval chain
-    document_chain = create_stuff_documents_chain(llm, prompt)
-    qa_chain = create_retrieval_chain(retriever, document_chain)
+    # Create a custom retrieval chain
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+    
+    qa_chain = (
+        {"context": retriever | format_docs, "input": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -95,12 +103,12 @@ if uploaded_files:
 
     if st.button("Ask") and user_query:
         with st.spinner("Thinking..."):
-            response = qa_chain.invoke({"input": user_query})
+            response = qa_chain.invoke(user_query)
 
-        st.session_state.chat_history.append((user_query, response["answer"]))
+        st.session_state.chat_history.append((user_query, response))
 
         st.subheader("✅ Answer:")
-        st.write(response["answer"])
+        st.write(response)
         
         # Show chat history
         if st.session_state.chat_history:
