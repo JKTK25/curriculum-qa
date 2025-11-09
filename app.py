@@ -3,7 +3,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain  # Fixed import
+from langchain_community.chains import create_retrieval_chain
+from langchain_community.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import ChatPromptTemplate
 from pypdf import PdfReader
 import docx
 
@@ -66,11 +68,25 @@ if uploaded_files:
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    qa_chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=retriever,
-        return_source_documents=False,
+    # Create a custom retrieval chain using available components
+    system_prompt = (
+        "You are an assistant for question-answering tasks. "
+        "Use the following pieces of retrieved context to answer "
+        "the question. If you don't know the answer, say that you "
+        "don't know. Use three sentences maximum and keep the "
+        "answer concise."
+        "\n\n"
+        "{context}"
     )
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{input}"),
+    ])
+    
+    # Create the document chain and retrieval chain
+    document_chain = create_stuff_documents_chain(llm, prompt)
+    qa_chain = create_retrieval_chain(retriever, document_chain)
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -79,11 +95,17 @@ if uploaded_files:
 
     if st.button("Ask") and user_query:
         with st.spinner("Thinking..."):
-            response = qa_chain.invoke(
-                {"question": user_query, "chat_history": st.session_state.chat_history}
-            )
+            response = qa_chain.invoke({"input": user_query})
 
         st.session_state.chat_history.append((user_query, response["answer"]))
 
         st.subheader("✅ Answer:")
         st.write(response["answer"])
+        
+        # Show chat history
+        if st.session_state.chat_history:
+            st.subheader("📝 Chat History")
+            for i, (question, answer) in enumerate(st.session_state.chat_history):
+                st.write(f"**Q{i+1}:** {question}")
+                st.write(f"**A{i+1}:** {answer}")
+                st.write("---")
