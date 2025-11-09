@@ -3,8 +3,11 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
-from langchain.chains import create_retrieval_chain
+
+# ✅ FIXED IMPORT PATHS
+from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
+
 from pypdf import PdfReader
 import docx
 
@@ -50,7 +53,7 @@ def build_vector_store(chunks):
 st.set_page_config(page_title="📚 Curriculum Q&A AI", page_icon="🤖", layout="wide")
 st.title("📚 AI Curriculum Question Answering Assistant")
 
-st.write("Upload curriculum documents (PDF / Word / TXT), then ask questions.")
+st.write("Upload curriculum documents (PDF / Word / TXT), then ask questions ⬇️")
 
 uploaded_files = st.file_uploader(
     "Upload files",
@@ -70,18 +73,16 @@ if uploaded_files:
 
     retriever = vector_store.as_retriever(search_kwargs={"k": 4})
 
-    # Use OpenAI (GPT-4o-mini) for answering
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     combine_docs_chain = create_stuff_documents_chain(llm)
     retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
 
-    question = st.text_input("Ask a question about the curriculum:")
+    user_query = st.text_input("Ask a question about the curriculum:")
 
-    if st.button("Ask") and question:
+    if st.button("Ask") and user_query:
         with st.spinner("Thinking..."):
-            response = retrieval_chain.invoke({"input": question})
+            result = retrieval_chain.invoke({"input": user_query})
 
-        st.write("### ✅ Answer:")
-        st.write(response["answer"])
-
+        st.subheader("✅ Answer:")
+        st.write(result["answer"])
