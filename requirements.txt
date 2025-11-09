@@ -1,13 +1,21 @@
+# ---- Streamlit UI ----
 streamlit>=1.30.0
 
+# ---- LangChain (Core + Community + OpenAI) ----
 langchain>=0.2.13
 langchain-community>=0.2.13
 langchain-openai>=0.1.7
 langchain-text-splitters>=0.2.2
 
+# ---- Embeddings / Vector DB ----
 faiss-cpu
 sentence-transformers>=3.0.0
 huggingface-hub>=0.23.0
 
+# ---- Document Parsing ----
 pypdf
 python-docx
+
+# ---- Optional (sometimes required for local huggingface model downloads) ----
+requests
+tqdm
