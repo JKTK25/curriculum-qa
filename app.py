@@ -48,24 +48,66 @@ def build_vector_store(chunks):
 # -----------------------------
 # Streamlit UI
 # -----------------------------
-st.set_page_config(page_title="📚 Curriculum AI Q&A", page_icon="🤖", layout="wide")
-st.title("📚 AI Curriculum Question Answering Assistant")
-st.write("Upload curriculum documents (PDF / Word / TXT), then ask anything about them.")
+st.set_page_config(page_title="EduChat - AI Learning Assistant", page_icon="🎓", layout="wide")
+
+# Custom CSS for professional styling
+st.markdown("""
+<style>
+.main-header {
+    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    padding: 2rem;
+    border-radius: 10px;
+    color: white;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+.upload-section {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 10px;
+    border-left: 4px solid #667eea;
+    margin-bottom: 1rem;
+}
+.chat-container {
+    background-color: #ffffff;
+    border-radius: 10px;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    min-height: 400px;
+    max-height: 500px;
+    overflow-y: auto;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="main-header">
+    <h1>🎓 EduChat - AI Learning Assistant</h1>
+    <p>Your intelligent companion for exploring curriculum content and enhancing learning</p>
+</div>
+""", unsafe_allow_html=True)
 
 # Set API key from Streamlit secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["DEESEEK_API_KEY"]
 
+st.markdown('<div class="upload-section">', unsafe_allow_html=True)
+st.markdown("### 📁 Upload Learning Materials")
+st.markdown("*Upload your curriculum documents to start learning with AI assistance*")
 uploaded_files = st.file_uploader(
-    "Upload files",
+    "Choose your files",
     type=["pdf", "docx", "txt"],
-    accept_multiple_files=True
+    accept_multiple_files=True,
+    help="Supported formats: PDF, Word documents, and text files"
 )
+st.markdown('</div>', unsafe_allow_html=True)
 
 # Initialize session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "qa_chain" not in st.session_state:
     st.session_state.qa_chain = None
+if "input_key" not in st.session_state:
+    st.session_state.input_key = 0
 
 if uploaded_files:
     docs = extract_text_from_uploaded_files(uploaded_files)
@@ -109,43 +151,66 @@ if uploaded_files:
     )
 
 # Chat interface
-st.divider()
+st.markdown("### 💬 Learning Conversation")
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
-# Display chat history in ChatGPT style
+# Display chat history with educational styling
 if st.session_state.chat_history:
     for question, answer in st.session_state.chat_history:
-        # User message
+        # Student question
         st.markdown(
             f"""
-            <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
-                <div style="background-color: #007bff; color: white; padding: 10px 15px; border-radius: 18px; max-width: 70%; word-wrap: break-word;">
-                    {question}
+            <div style="display: flex; justify-content: flex-end; margin: 15px 0; align-items: flex-start;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 18px; border-radius: 20px 20px 5px 20px; max-width: 75%; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);">
+                    <div style="font-weight: 500; margin-bottom: 4px; font-size: 0.9em; opacity: 0.9;">👨‍🎓 Student</div>
+                    <div>{question}</div>
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
         
-        # Assistant message
+        # AI tutor response
         st.markdown(
             f"""
-            <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
-                <div style="background-color: #f1f3f4; color: black; padding: 10px 15px; border-radius: 18px; max-width: 70%; word-wrap: break-word;">
-                    {answer}
+            <div style="display: flex; justify-content: flex-start; margin: 15px 0; align-items: flex-start;">
+                <div style="background-color: #f8f9fa; color: #2c3e50; padding: 12px 18px; border-radius: 20px 20px 20px 5px; max-width: 75%; border-left: 4px solid #667eea; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="font-weight: 500; margin-bottom: 4px; font-size: 0.9em; color: #667eea;">🤖 AI Tutor</div>
+                    <div style="line-height: 1.6;">{answer}</div>
                 </div>
             </div>
             """,
             unsafe_allow_html=True
         )
+else:
+    st.markdown(
+        """
+        <div style="text-align: center; padding: 3rem; color: #6c757d;">
+            <h3>🌟 Welcome to Your Learning Journey!</h3>
+            <p>Upload your curriculum materials above and start asking questions to enhance your understanding.</p>
+            <p><em>I'm here to help you learn, explain concepts, and answer your questions!</em></p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-# Input area at bottom
-col1, col2 = st.columns([6, 1])
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Input area with educational styling
+st.markdown("---")
+col1, col2 = st.columns([5, 1])
 with col1:
-    user_query = st.text_input("Message", placeholder="Ask a question about your documents...", label_visibility="collapsed")
+    user_query = st.text_input(
+        "Ask your question", 
+        placeholder="What would you like to learn about? Ask me anything from your uploaded materials...", 
+        label_visibility="collapsed",
+        key=f"input_{st.session_state.input_key}",
+        help="Type your question and press Send to get AI-powered explanations"
+    )
 with col2:
-    send_button = st.button("Send", use_container_width=True)
+    send_button = st.button("🚀 Ask", use_container_width=True, type="primary")
 
-if (send_button or user_query) and user_query:
+if send_button and user_query:
     if st.session_state.qa_chain is None:
         st.error("Please upload documents first!")
     else:
@@ -153,4 +218,5 @@ if (send_button or user_query) and user_query:
             response = st.session_state.qa_chain.invoke(user_query)
         
         st.session_state.chat_history.append((user_query, response))
+        st.session_state.input_key += 1
         st.rerun()
