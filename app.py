@@ -1,13 +1,12 @@
 import os
 import csv
 import io
-import openai
 import uuid
 import streamlit as st
 from huggingface_hub import hf_hub_download
 from langchain_community.vectorstores import FAISS
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
@@ -25,54 +24,77 @@ if not API_KEY:
 
 # ------------- FIREBASE INIT -------------
 if "firebase_app" not in st.session_state:
-    if "FIREBASE" in st.secrets:
-        cred = credentials.Certificate(dict(st.secrets["FIREBASE"]))
-    else:
-        cred = credentials.Certificate("firebase_key.json")  # Local fallback
+    try:
+        if "FIREBASE" in st.secrets:
+            cred = credentials.Certificate(dict(st.secrets["FIREBASE"]))
+        else:
+            cred = credentials.Certificate("firebase_key.json")  # Local fallback
 
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
-    st.session_state.firebase_app = True
-
-db = firestore.client()
+        st.session_state.firebase_app = True
+        db = firestore.client()
+    except Exception as e:
+        st.error(f"❌ Firebase initialization failed: {e}")
+        st.session_state.firebase_app = False
+        db = None
+else:
+    db = firestore.client()
 
 if "user_id" not in st.session_state:
     st.session_state.user_id = str(uuid.uuid4())
 
 def log_chat(user_id, question, answer):
-    db.collection("chat_logs").document(user_id).collection("history").add({
-        "question": question,
-        "answer": answer,
-        "timestamp": firestore.SERVER_TIMESTAMP
-    })
+    if db:
+        try:
+            db.collection("chat_logs").document(user_id).collection("history").add({
+                "question": question,
+                "answer": answer,
+                "timestamp": firestore.SERVER_TIMESTAMP
+            })
+        except Exception as e:
+            st.error(f"⚠️ Failed to log chat: {e}")
 
 # ------------- CACHED RESOURCES -------------
 @st.cache_resource
 def load_embeddings():
-    return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    try:
+        return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    except Exception as e:
+        st.error(f"❌ Failed to load embeddings: {e}")
+        return None
 
 @st.cache_resource
 def load_vectorstore(local_dir="faiss_index_general"):
-    HF_REPO_ID = "JK-TK/curriculum-faiss-index"
-    os.makedirs(local_dir, exist_ok=True)
+    try:
+        HF_REPO_ID = "JK-TK/curriculum-faiss-index"
+        os.makedirs(local_dir, exist_ok=True)
 
-    if not os.path.exists(os.path.join(local_dir, "index.faiss")) or not os.path.exists(os.path.join(local_dir, "index.pkl")):
-        hf_hub_download(repo_id=HF_REPO_ID, filename="index.faiss", repo_type="dataset", local_dir=local_dir)
-        hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=local_dir)
+        if not os.path.exists(os.path.join(local_dir, "index.faiss")) or not os.path.exists(os.path.join(local_dir, "index.pkl")):
+            hf_hub_download(repo_id=HF_REPO_ID, filename="index.faiss", repo_type="dataset", local_dir=local_dir)
+            hf_hub_download(repo_id=HF_REPO_ID, filename="index.pkl", repo_type="dataset", local_dir=local_dir)
 
-    return FAISS.load_local(local_dir, load_embeddings(), allow_dangerous_deserialization=True)
+        embeddings = load_embeddings()
+        if embeddings:
+            return FAISS.load_local(local_dir, embeddings, allow_dangerous_deserialization=True)
+        return None
+    except Exception as e:
+        st.error(f"❌ Failed to load vector store: {e}")
+        return None
 
 @st.cache_resource
 def load_llm():
-    openai.api_base = "https://api.deepseek.com/v1"
-    openai.api_key = API_KEY
-    return ChatOpenAI(
-        model="deepseek-chat",
-        openai_api_key=API_KEY,
-        openai_api_base="https://api.deepseek.com/v1",
-        temperature=0.3
-    )
+    try:
+        return ChatOpenAI(
+            model="deepseek-chat",
+            openai_api_key=API_KEY,
+            openai_api_base="https://api.deepseek.com/v1",
+            temperature=0.3
+        )
+    except Exception as e:
+        st.error(f"❌ Failed to load LLM: {e}")
+        return None
 
 @st.cache_resource
 def load_memory():
@@ -80,16 +102,29 @@ def load_memory():
 
 @st.cache_resource
 def load_qa_chain():
-    retriever = load_vectorstore().as_retriever(search_kwargs={"k": 5})
-    prompt = ChatPromptTemplate.from_template(
-        "English.\n\nContext:\n{context}\n\nQuestion: {question}"
-    )
-    return ConversationalRetrievalChain.from_llm(
-        llm=load_llm(),
-        retriever=retriever,
-        memory=load_memory(),
-        combine_docs_chain_kwargs={"prompt": prompt}
-    )
+    try:
+        vectorstore = load_vectorstore()
+        if not vectorstore:
+            return None
+            
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+        prompt = ChatPromptTemplate.from_template(
+            "English.\n\nContext:\n{context}\n\nQuestion: {question}"
+        )
+        
+        llm = load_llm()
+        if not llm:
+            return None
+            
+        return ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=retriever,
+            memory=load_memory(),
+            combine_docs_chain_kwargs={"prompt": prompt}
+        )
+    except Exception as e:
+        st.error(f"❌ Failed to load QA chain: {e}")
+        return None
 
 # ------------- HEADER & STYLING -------------
 st.image("https://static.mycareersfuture.gov.sg/images/company/logos/b9b623bfe890ac230ac57629e84742ba/lark-technologies.png", width=100)
@@ -135,7 +170,10 @@ if "chat_history" not in st.session_state:
 if "qa_chain" not in st.session_state:
     with st.spinner("🤖 Initializing chatbot..."):
         st.session_state.qa_chain = load_qa_chain()
-        st.success("✅ Chatbot is ready!")
+        if st.session_state.qa_chain:
+            st.success("✅ Chatbot is ready!")
+        else:
+            st.error("❌ Failed to initialize chatbot. Please check the logs.")
 
 # ------------- CHAT DISPLAY -------------
 if st.session_state.qa_chain:
@@ -174,6 +212,7 @@ if st.session_state.qa_chain:
                     result = st.session_state.qa_chain({"question": query})
                     answer = result["answer"]
 
+                    # Clean up the answer
                     for phrase in [
                         "from the provided context", "based on the context provided",
                         "according to the information provided", "from what I can gather"
@@ -186,15 +225,20 @@ if st.session_state.qa_chain:
 
                     log_chat(st.session_state.user_id, query, answer)
 
-                    with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
-                        writer = csv.writer(f)
-                        if f.tell() == 0:
-                            writer.writerow(["Question", "Answer"])
-                        writer.writerow([query, answer])
+                    # Log to CSV
+                    try:
+                        with open("qa_log.csv", "a", newline='', encoding="utf-8") as f:
+                            writer = csv.writer(f)
+                            if f.tell() == 0:
+                                writer.writerow(["Question", "Answer"])
+                            writer.writerow([query, answer])
+                    except Exception as e:
+                        st.error(f"⚠️ Failed to save to CSV: {e}")
+                        
                 except Exception as e:
-                    st.error(f"⚠️ Error: {e}")
+                    st.error(f"⚠️ Error processing your question: {e}")
 
-# ------------- DOWNLOAD CHAT HISTORY (Text only) -------------
+# ------------- DOWNLOAD CHAT HISTORY -------------
 if st.session_state.chat_history:
     txt_buffer = io.StringIO()
     for role, msg in st.session_state.chat_history:
