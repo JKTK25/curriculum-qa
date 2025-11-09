@@ -8,6 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pypdf import PdfReader
 import docx
+import os
 
 
 # -----------------------------
@@ -51,6 +52,9 @@ st.set_page_config(page_title="📚 Curriculum AI Q&A", page_icon="🤖", layout
 st.title("📚 AI Curriculum Question Answering Assistant")
 st.write("Upload curriculum documents (PDF / Word / TXT), then ask anything about them.")
 
+# Set API key from Streamlit secrets
+os.environ["OPENAI_API_KEY"] = st.secrets["DEESEEK_API_KEY"]
+
 uploaded_files = st.file_uploader(
     "Upload files",
     type=["pdf", "docx", "txt"],
@@ -71,7 +75,11 @@ if uploaded_files:
     st.success("✅ Documents processed successfully!")
 
     retriever = vector_store.as_retriever(search_kwargs={"k": 4})
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    llm = ChatOpenAI(
+        model="deepseek-chat",
+        temperature=0,
+        base_url="https://api.deepseek.com"
+    )
 
     # Create a custom retrieval chain using available components
     system_prompt = (
