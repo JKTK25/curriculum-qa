@@ -213,17 +213,6 @@ st.markdown("""
 # Set API key from Streamlit secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["DEESEEK_API_KEY"]
 
-st.markdown('<div class="upload-section">', unsafe_allow_html=True)
-st.markdown("### 📁 Upload Learning Materials")
-st.markdown("*Upload your curriculum documents to start learning with AI assistance*")
-uploaded_files = st.file_uploader(
-    "Choose your files",
-    type=["pdf", "docx", "txt"],
-    accept_multiple_files=True,
-    help="Supported formats: PDF, Word documents, and text files"
-)
-st.markdown('</div>', unsafe_allow_html=True)
-
 # Initialize session state
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -284,8 +273,172 @@ with st.sidebar:
     
     st.markdown('</div>', unsafe_allow_html=True)
 
+# Initialize general chat LLM
+llm = ChatOpenAI(
+    model="deepseek-chat",
+    temperature=0.7,
+    base_url="https://api.deepseek.com"
+)
+
+# General chat prompt for when no documents are uploaded
+general_prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful AI assistant. Answer questions clearly and concisely."),
+    ("human", "{input}"),
+])
+
+# Set up general chat chain
+if st.session_state.qa_chain is None:
+    st.session_state.qa_chain = general_prompt | llm | StrOutputParser()
+
+# Chat interface
+st.markdown("### 💬 Learning Conversation")
+st.markdown('<div class="chat-container" style="max-height: 60vh; overflow-y: auto;">', unsafe_allow_html=True)
+
+# Display chat history with educational styling
+if st.session_state.chat_history:
+    for question, answer in st.session_state.chat_history:
+        # Student question
+        st.markdown(
+            f"""
+            <div style="display: flex; justify-content: flex-end; margin: 15px 0; align-items: flex-start;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 18px; border-radius: 20px 20px 5px 20px; max-width: 75%; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);">
+                    <div style="font-weight: 500; margin-bottom: 4px; font-size: 0.9em; opacity: 0.9;">👨🎓 Student</div>
+                    <div>{question}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        
+        # AI tutor response
+        st.markdown(
+            f"""
+            <div style="display: flex; justify-content: flex-start; margin: 15px 0; align-items: flex-start;">
+                <div style="background-color: #f8f9fa; color: #2c3e50; padding: 12px 18px; border-radius: 20px 20px 20px 5px; max-width: 75%; border-left: 4px solid #667eea; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="font-weight: 500; margin-bottom: 4px; font-size: 0.9em; color: #667eea;">🤖 AI Tutor</div>
+                    <div style="line-height: 1.6;">{answer}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+else:
+    st.markdown(
+        """
+        <div style="text-align: center; padding: 4rem 2rem; background: linear-gradient(145deg, #f8f9fa, #ffffff); border-radius: 20px; margin: 2rem 0;">
+            <div style="font-size: 4em; margin-bottom: 1rem; animation: fadeInDown 1s ease-out;">🎓</div>
+            <h2 style="color: #667eea; margin-bottom: 1rem; font-weight: 600;">Welcome to EduChat!</h2>
+            <p style="font-size: 1.1em; color: #6c757d; margin-bottom: 1.5rem; line-height: 1.6;">Your intelligent learning companion is ready to help you explore and understand your curriculum materials.</p>
+            <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 1rem 2rem; border-radius: 15px; display: inline-block; margin-bottom: 1rem;">
+                <strong>🚀 Getting Started:</strong>
+            </div>
+            <div style="display: flex; justify-content: center; gap: 2rem; margin-top: 1.5rem; flex-wrap: wrap;">
+                <div style="background: white; padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 200px;">
+                    <div style="font-size: 2em; margin-bottom: 0.5rem;">💬</div>
+                    <strong>1. Chat</strong><br>
+                    <small>Ask any question</small>
+                </div>
+                <div style="background: white; padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 200px;">
+                    <div style="font-size: 2em; margin-bottom: 0.5rem;">📁</div>
+                    <strong>2. Upload (Optional)</strong><br>
+                    <small>Add documents for context</small>
+                </div>
+                <div style="background: white; padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 200px;">
+                    <div style="font-size: 2em; margin-bottom: 0.5rem;">🎆</div>
+                    <strong>3. Learn</strong><br>
+                    <small>Get AI-powered insights</small>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Enhanced input area with professional styling
+st.markdown("""
+<div style="background: linear-gradient(145deg, #f8f9fa, #ffffff); padding: 1.5rem; border-radius: 20px; margin-top: 2rem; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+    <div style="text-align: center; margin-bottom: 1rem;">
+        <h4 style="color: #667eea; margin: 0;">💭 Ask Your Question</h4>
+        <small style="color: #6c757d;">Get instant AI-powered explanations</small>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+col1, col2 = st.columns([6, 1])
+with col1:
+    user_query = st.text_input(
+        "Question", 
+        placeholder="💡 Ask me anything! Upload documents below for document-specific questions...", 
+        label_visibility="collapsed",
+        key=f"input_{st.session_state.input_key}",
+        help="💬 Type your question and click Ask to get AI-powered explanations"
+    )
+with col2:
+    send_button = st.button("🚀 Ask", use_container_width=True, type="primary")
+
+if send_button and user_query:
+    with st.spinner("Thinking..."):
+        if uploaded_files:
+            # Use document-based QA if files are uploaded
+            response = st.session_state.qa_chain.invoke(user_query)
+        else:
+            # Use general chat
+            response = st.session_state.qa_chain.invoke({"input": user_query})
+    
+    st.session_state.chat_history.append((user_query, response))
+    st.session_state.input_key += 1
+    st.rerun()
+
+# Upload section moved to bottom
+st.markdown("---")
+st.markdown('<div class="upload-section">', unsafe_allow_html=True)
+st.markdown("### 📁 Upload Learning Materials (Optional)")
+st.markdown("*Upload curriculum documents for document-specific questions and enhanced learning assistance*")
+uploaded_files = st.file_uploader(
+    "Choose your files",
+    type=["pdf", "docx", "txt"],
+    accept_multiple_files=True,
+    help="Supported formats: PDF, Word documents, and text files"
+)
+st.markdown('</div>', unsafe_allow_html=True)
+
 if uploaded_files:
     docs = extract_text_from_uploaded_files(uploaded_files)
+    chunks = split_documents(docs)
+    vector_store = build_vector_store(chunks)
+
+    st.success("✅ Documents processed successfully! Now ask questions about your documents.")
+
+    retriever = vector_store.as_retriever(search_kwargs={"k": 4})
+    
+    # Create document-specific retrieval chain
+    system_prompt = (
+        "You are an assistant for question-answering tasks. "
+        "Use the following pieces of retrieved context to answer "
+        "the question. If you don't know the answer, say that you "
+        "don't know. Use three sentences maximum and keep the "
+        "answer concise."
+        "\n\n"
+        "{context}"
+    )
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{input}"),
+    ])
+    
+    # Create a custom retrieval chain
+    def format_docs(docs):
+        return "\n\n".join(doc.page_content for doc in docs)
+    
+    st.session_state.qa_chain = (
+        {"context": retriever | format_docs, "input": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )iles)
     chunks = split_documents(docs)
     vector_store = build_vector_store(chunks)
 
