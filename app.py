@@ -7,12 +7,13 @@ from huggingface_hub import hf_hub_download
 
 # ✅ Updated imports for latest LangChain ecosystem
 from langchain_community.vectorstores import FAISS
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_openai import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
+
 
 # ✅ Firebase
 import firebase_admin
