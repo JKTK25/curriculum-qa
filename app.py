@@ -3,21 +3,16 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
-
-# ✅ FIXED IMPORT PATHS
-from langchain.chains.retrieval import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-
+from langchain_community.chains import ConversationalRetrievalChain
 from pypdf import PdfReader
 import docx
 
 
-# -------------------------------------
+# -----------------------------
 # Helper functions
-# -------------------------------------
+# -----------------------------
 def extract_text_from_uploaded_files(uploaded_files):
     documents = []
-
     for file in uploaded_files:
         if file.type == "application/pdf":
             pdf = PdfReader(file)
@@ -31,7 +26,7 @@ def extract_text_from_uploaded_files(uploaded_files):
             text = "\n".join([para.text for para in doc.paragraphs])
             documents.append(text)
 
-        else:  # Plain text files
+        else:  # TXT
             documents.append(file.read().decode("utf-8"))
 
     return documents
@@ -47,13 +42,12 @@ def build_vector_store(chunks):
     return FAISS.from_documents(chunks, embeddings)
 
 
-# -------------------------------------
+# -----------------------------
 # Streamlit UI
-# -------------------------------------
-st.set_page_config(page_title="📚 Curriculum Q&A AI", page_icon="🤖", layout="wide")
+# -----------------------------
+st.set_page_config(page_title="📚 Curriculum AI Q&A", page_icon="🤖", layout="wide")
 st.title("📚 AI Curriculum Question Answering Assistant")
-
-st.write("Upload curriculum documents (PDF / Word / TXT), then ask questions ⬇️")
+st.write("Upload curriculum documents (PDF / Word / TXT), then ask anything about them.")
 
 uploaded_files = st.file_uploader(
     "Upload files",
@@ -61,28 +55,35 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-# -------------------------------------
-# Embedding + Retrieval
-# -------------------------------------
 if uploaded_files:
     docs = extract_text_from_uploaded_files(uploaded_files)
     chunks = split_documents(docs)
     vector_store = build_vector_store(chunks)
 
-    st.success("✅ Documents uploaded and processed successfully!")
+    st.success("✅ Documents processed successfully!")
 
     retriever = vector_store.as_retriever(search_kwargs={"k": 4})
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    combine_docs_chain = create_stuff_documents_chain(llm)
-    retrieval_chain = create_retrieval_chain(retriever, combine_docs_chain)
+    qa_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=retriever,
+        return_source_documents=False,
+    )
 
-    user_query = st.text_input("Ask a question about the curriculum:")
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    user_query = st.text_input("Ask a question:")
 
     if st.button("Ask") and user_query:
         with st.spinner("Thinking..."):
-            result = retrieval_chain.invoke({"input": user_query})
+            response = qa_chain.invoke(
+                {"question": user_query, "chat_history": st.session_state.chat_history}
+            )
+
+        st.session_state.chat_history.append((user_query, response["answer"]))
 
         st.subheader("✅ Answer:")
-        st.write(result["answer"])
+        st.write(response["answer"])
