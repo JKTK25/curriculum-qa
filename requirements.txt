@@ -1,20 +1,13 @@
-streamlit>=1.28.0
+streamlit>=1.30.0
 
-# LangChain - no forced version pin to avoid conflicts
 langchain>=0.2.13
 langchain-community>=0.2.13
 langchain-text-splitters>=0.2.2
 langchain-openai>=0.1.7
 
-# Vector embeddings and model handling
-huggingface-hub>=0.22.0
-sentence-transformers>=2.2.0
 faiss-cpu
+sentence-transformers>=3.0.0
+huggingface-hub>=0.23.0
 
-# Optional document parsing + utilities
-python-docx>=1.1.0
-pymupdf>=1.23.0
-tqdm>=4.65.0
-docx2txt>=0.8
-firebase-admin>=6.0.0
-openai>=1.0.0
+pypdf
+python-docx
