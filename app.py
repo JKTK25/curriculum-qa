@@ -108,6 +108,34 @@ if "qa_chain" not in st.session_state:
     st.session_state.qa_chain = None
 if "input_key" not in st.session_state:
     st.session_state.input_key = 0
+if "chat_sessions" not in st.session_state:
+    st.session_state.chat_sessions = []
+
+# Sidebar for chat management
+with st.sidebar:
+    st.markdown("### 💬 Chat Management")
+    
+    if st.button("🆕 New Chat", use_container_width=True, type="primary"):
+        if st.session_state.chat_history:
+            st.session_state.chat_sessions.append({
+                "history": st.session_state.chat_history.copy(),
+                "title": st.session_state.chat_history[0][0][:30] + "..." if st.session_state.chat_history else "Empty Chat"
+            })
+        st.session_state.chat_history = []
+        st.session_state.input_key += 1
+        st.rerun()
+    
+    st.markdown("---")
+    st.markdown("### 📚 Chat History")
+    
+    if st.session_state.chat_sessions:
+        for i, session in enumerate(reversed(st.session_state.chat_sessions)):
+            session_idx = len(st.session_state.chat_sessions) - 1 - i
+            if st.button(f"💭 {session['title']}", key=f"session_{session_idx}", use_container_width=True):
+                st.session_state.chat_history = session['history'].copy()
+                st.rerun()
+    else:
+        st.markdown("*No previous chats*")
 
 if uploaded_files:
     docs = extract_text_from_uploaded_files(uploaded_files)
