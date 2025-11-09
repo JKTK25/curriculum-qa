@@ -3,8 +3,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
-# Alternative import if the above still fails
-from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain # ✅ FIXED IMPORT
+from langchain.chains import ConversationalRetrievalChain  # Fixed import
 from pypdf import PdfReader
 import docx
 
