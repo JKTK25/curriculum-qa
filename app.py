@@ -57,6 +57,12 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
+# Initialize session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "qa_chain" not in st.session_state:
+    st.session_state.qa_chain = None
+
 if uploaded_files:
     docs = extract_text_from_uploaded_files(uploaded_files)
     chunks = split_documents(docs)
@@ -65,7 +71,6 @@ if uploaded_files:
     st.success("✅ Documents processed successfully!")
 
     retriever = vector_store.as_retriever(search_kwargs={"k": 4})
-
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     # Create a custom retrieval chain using available components
@@ -88,31 +93,33 @@ if uploaded_files:
     def format_docs(docs):
         return "\n\n".join(doc.page_content for doc in docs)
     
-    qa_chain = (
+    st.session_state.qa_chain = (
         {"context": retriever | format_docs, "input": RunnablePassthrough()}
         | prompt
         | llm
         | StrOutputParser()
     )
 
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+# Chat interface (always visible)
+st.divider()
+user_query = st.text_input("Ask a question about your documents:")
 
-    user_query = st.text_input("Ask a question:")
-
-    if st.button("Ask") and user_query:
+if st.button("Ask") and user_query:
+    if st.session_state.qa_chain is None:
+        st.error("Please upload documents first!")
+    else:
         with st.spinner("Thinking..."):
-            response = qa_chain.invoke(user_query)
+            response = st.session_state.qa_chain.invoke(user_query)
 
         st.session_state.chat_history.append((user_query, response))
 
         st.subheader("✅ Answer:")
         st.write(response)
-        
-        # Show chat history
-        if st.session_state.chat_history:
-            st.subheader("📝 Chat History")
-            for i, (question, answer) in enumerate(st.session_state.chat_history):
-                st.write(f"**Q{i+1}:** {question}")
-                st.write(f"**A{i+1}:** {answer}")
-                st.write("---")
+
+# Show chat history
+if st.session_state.chat_history:
+    st.subheader("📝 Chat History")
+    for i, (question, answer) in enumerate(st.session_state.chat_history):
+        st.write(f"**Q{i+1}:** {question}")
+        st.write(f"**A{i+1}:** {answer}")
+        st.write("---")
